@@ -1,0 +1,31 @@
+<Project>
+  <PropertyGroup>
+
+	<NoWarn>$(NoWarn);1591</NoWarn>
+    <!-- Target Framework -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!-- Language -->
+    <LangVersion>14.0</LangVersion>
+
+    <!-- Nullable -->
+    <Nullable>enable</Nullable>
+
+    <!-- Implicit Usings -->
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Documentation -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Build -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Analysis -->
+    <AnalysisLevel>latest</AnalysisLevel>
+
+    <!-- Deterministic -->
+    <Deterministic>true</Deterministic>
+
+  </PropertyGroup>
+
+</Project>
