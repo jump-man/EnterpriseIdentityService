@@ -26,7 +26,7 @@ public sealed class User : AggregateRoot<UserId>
 
     public PasswordHash PasswordHash { get; }
 
-    public UserStatus Status { get; }
+    public UserStatus Status { get; private set; }
 
     public DateTimeOffset CreatedAtUtc { get; }
 
@@ -46,5 +46,17 @@ public sealed class User : AggregateRoot<UserId>
         user.RaiseDomainEvent(new UserRegisteredDomainEvent(id, occurredOnUtc));
 
         return user;
+    }
+
+    public void VerifyEmail(DateTimeOffset occurredOnUtc)
+    {
+        if (Status != UserStatus.Pending)
+        {
+            throw new InvalidOperationException("Only pending users can verify their email.");
+        }
+
+        Status = UserStatus.Active;
+
+        RaiseDomainEvent(new UserEmailVerifiedDomainEvent(Id, occurredOnUtc));
     }
 }

@@ -8,6 +8,9 @@ public sealed class UserTests
     private static readonly DateTimeOffset OccurredOnUtc =
         new(2026, 8, 3, 8, 30, 0, TimeSpan.Zero);
 
+    private static readonly DateTimeOffset EmailVerifiedOnUtc =
+        new(2026, 8, 3, 9, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public void Register_ShouldPreserveSuppliedUserId()
     {
@@ -134,6 +137,93 @@ public sealed class UserTests
             OccurredOnUtc));
     }
 
+    [Fact]
+    public void VerifyEmail_ShouldSetStatusToActive_WhenUserIsPending()
+    {
+        User user = CreateUser();
+
+        user.VerifyEmail(EmailVerifiedOnUtc);
+
+        Assert.Equal(UserStatus.Active, user.Status);
+    }
+
+    [Fact]
+    public void VerifyEmail_ShouldRaiseExactlyOneDomainEvent()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+
+        user.VerifyEmail(EmailVerifiedOnUtc);
+
+        Assert.Single(user.DomainEvents);
+    }
+
+    [Fact]
+    public void VerifyEmail_ShouldRaiseUserEmailVerifiedDomainEvent()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+
+        user.VerifyEmail(EmailVerifiedOnUtc);
+
+        Assert.IsType<UserEmailVerifiedDomainEvent>(Assert.Single(user.DomainEvents));
+    }
+
+    [Fact]
+    public void VerifyEmail_ShouldPlaceUserIdInDomainEvent()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+
+        user.VerifyEmail(EmailVerifiedOnUtc);
+
+        var domainEvent = Assert.IsType<UserEmailVerifiedDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(user.Id, domainEvent.UserId);
+    }
+
+    [Fact]
+    public void VerifyEmail_ShouldPlaceOccurrenceTimeInDomainEvent()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+
+        user.VerifyEmail(EmailVerifiedOnUtc);
+
+        var domainEvent = Assert.IsType<UserEmailVerifiedDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(EmailVerifiedOnUtc, domainEvent.OccurredOnUtc);
+    }
+
+    [Fact]
+    public void VerifyEmail_ShouldThrowInvalidOperationException_WhenUserIsAlreadyActive()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.VerifyEmail(EmailVerifiedOnUtc));
+
+        Assert.Equal("Only pending users can verify their email.", exception.Message);
+    }
+
+    [Fact]
+    public void VerifyEmail_ShouldNotChangeStatus_WhenVerificationFails()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.VerifyEmail(EmailVerifiedOnUtc));
+
+        Assert.Equal(UserStatus.Active, user.Status);
+    }
+
+    [Fact]
+    public void VerifyEmail_ShouldNotRaiseDomainEvent_WhenVerificationFails()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.VerifyEmail(EmailVerifiedOnUtc));
+
+        Assert.Empty(user.DomainEvents);
+    }
+
     private static User CreateUser(
         UserId? id = null,
         Email? email = null,
@@ -147,5 +237,15 @@ public sealed class UserTests
             username ?? Username.Create("ali.dev"),
             passwordHash ?? PasswordHash.Create("FAKE-HASH"),
             occurredOnUtc ?? OccurredOnUtc);
+    }
+
+    private static User CreateActiveUserWithoutDomainEvents()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+        user.VerifyEmail(EmailVerifiedOnUtc);
+        user.ClearDomainEvents();
+
+        return user;
     }
 }
