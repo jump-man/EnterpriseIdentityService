@@ -71,4 +71,16 @@ public sealed class User : AggregateRoot<UserId>
 
         RaiseDomainEvent(new UserDisabledDomainEvent(Id, occurredOnUtc));
     }
+
+    public void Enable(DateTimeOffset occurredOnUtc)
+    {
+        if (Status != UserStatus.Disabled)
+        {
+            throw new InvalidOperationException("Only disabled users can be enabled.");
+        }
+
+        Status = UserStatus.Active;
+
+        RaiseDomainEvent(new UserEnabledDomainEvent(Id, occurredOnUtc));
+    }
 }

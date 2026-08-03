@@ -14,6 +14,9 @@ public sealed class UserTests
     private static readonly DateTimeOffset DisabledOnUtc =
         new(2026, 8, 3, 10, 0, 0, TimeSpan.Zero);
 
+    private static readonly DateTimeOffset EnabledOnUtc =
+        new(2026, 8, 3, 11, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public void Register_ShouldPreserveSuppliedUserId()
     {
@@ -318,6 +321,101 @@ public sealed class UserTests
         User user = CreateDisabledUserWithoutDomainEvents();
 
         Assert.Throws<InvalidOperationException>(() => user.Disable(DisabledOnUtc));
+
+        Assert.Empty(user.DomainEvents);
+    }
+
+    [Fact]
+    public void Enable_ShouldSetStatusToActive_WhenUserIsDisabled()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        user.Enable(EnabledOnUtc);
+
+        Assert.Equal(UserStatus.Active, user.Status);
+    }
+
+    [Fact]
+    public void Enable_ShouldRaiseExactlyOneDomainEvent()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        user.Enable(EnabledOnUtc);
+
+        Assert.Single(user.DomainEvents);
+    }
+
+    [Fact]
+    public void Enable_ShouldRaiseUserEnabledDomainEvent()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        user.Enable(EnabledOnUtc);
+
+        Assert.IsType<UserEnabledDomainEvent>(Assert.Single(user.DomainEvents));
+    }
+
+    [Fact]
+    public void Enable_ShouldPlaceUserIdInDomainEvent()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        user.Enable(EnabledOnUtc);
+
+        var domainEvent = Assert.IsType<UserEnabledDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(user.Id, domainEvent.UserId);
+    }
+
+    [Fact]
+    public void Enable_ShouldPlaceOccurrenceTimeInDomainEvent()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        user.Enable(EnabledOnUtc);
+
+        var domainEvent = Assert.IsType<UserEnabledDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(EnabledOnUtc, domainEvent.OccurredOnUtc);
+    }
+
+    [Fact]
+    public void Enable_ShouldThrowInvalidOperationException_WhenUserIsPending()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Enable(EnabledOnUtc));
+
+        Assert.Equal("Only disabled users can be enabled.", exception.Message);
+    }
+
+    [Fact]
+    public void Enable_ShouldThrowInvalidOperationException_WhenUserIsActive()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Enable(EnabledOnUtc));
+
+        Assert.Equal("Only disabled users can be enabled.", exception.Message);
+    }
+
+    [Fact]
+    public void Enable_ShouldNotChangeStatus_WhenEnableFails()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.Enable(EnabledOnUtc));
+
+        Assert.Equal(UserStatus.Active, user.Status);
+    }
+
+    [Fact]
+    public void Enable_ShouldNotRaiseDomainEvent_WhenEnableFails()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.Enable(EnabledOnUtc));
 
         Assert.Empty(user.DomainEvents);
     }
