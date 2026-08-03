@@ -83,4 +83,28 @@ public sealed class User : AggregateRoot<UserId>
 
         RaiseDomainEvent(new UserEnabledDomainEvent(Id, occurredOnUtc));
     }
+
+    public void Lock(DateTimeOffset occurredOnUtc)
+    {
+        if (Status != UserStatus.Active)
+        {
+            throw new InvalidOperationException("Only active users can be locked.");
+        }
+
+        Status = UserStatus.Locked;
+
+        RaiseDomainEvent(new UserLockedDomainEvent(Id, occurredOnUtc));
+    }
+
+    public void Unlock(DateTimeOffset occurredOnUtc)
+    {
+        if (Status != UserStatus.Locked)
+        {
+            throw new InvalidOperationException("Only locked users can be unlocked.");
+        }
+
+        Status = UserStatus.Active;
+
+        RaiseDomainEvent(new UserUnlockedDomainEvent(Id, occurredOnUtc));
+    }
 }

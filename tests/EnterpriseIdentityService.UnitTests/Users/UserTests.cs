@@ -17,6 +17,12 @@ public sealed class UserTests
     private static readonly DateTimeOffset EnabledOnUtc =
         new(2026, 8, 3, 11, 0, 0, TimeSpan.Zero);
 
+    private static readonly DateTimeOffset LockedOnUtc =
+        new(2026, 8, 3, 12, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset UnlockedOnUtc =
+        new(2026, 8, 3, 13, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public void Register_ShouldPreserveSuppliedUserId()
     {
@@ -420,6 +426,257 @@ public sealed class UserTests
         Assert.Empty(user.DomainEvents);
     }
 
+    [Fact]
+    public void Lock_ShouldSetStatusToLocked_WhenUserIsActive()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Lock(LockedOnUtc);
+
+        Assert.Equal(UserStatus.Locked, user.Status);
+    }
+
+    [Fact]
+    public void Lock_ShouldRaiseExactlyOneDomainEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Lock(LockedOnUtc);
+
+        Assert.Single(user.DomainEvents);
+    }
+
+    [Fact]
+    public void Lock_ShouldRaiseUserLockedDomainEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Lock(LockedOnUtc);
+
+        Assert.IsType<UserLockedDomainEvent>(Assert.Single(user.DomainEvents));
+    }
+
+    [Fact]
+    public void Lock_ShouldPlaceUserIdInDomainEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Lock(LockedOnUtc);
+
+        var domainEvent = Assert.IsType<UserLockedDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(user.Id, domainEvent.UserId);
+    }
+
+    [Fact]
+    public void Lock_ShouldPlaceOccurrenceTimeInDomainEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Lock(LockedOnUtc);
+
+        var domainEvent = Assert.IsType<UserLockedDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(LockedOnUtc, domainEvent.OccurredOnUtc);
+    }
+
+    [Fact]
+    public void Lock_ShouldThrowInvalidOperationException_WhenUserIsPending()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Lock(LockedOnUtc));
+
+        Assert.Equal("Only active users can be locked.", exception.Message);
+    }
+
+    [Fact]
+    public void Lock_ShouldThrowInvalidOperationException_WhenUserIsAlreadyLocked()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Lock(LockedOnUtc));
+
+        Assert.Equal("Only active users can be locked.", exception.Message);
+    }
+
+    [Fact]
+    public void Lock_ShouldThrowInvalidOperationException_WhenUserIsDisabled()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Lock(LockedOnUtc));
+
+        Assert.Equal("Only active users can be locked.", exception.Message);
+    }
+
+    [Fact]
+    public void Lock_ShouldNotChangeStatus_WhenLockFails()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.Lock(LockedOnUtc));
+
+        Assert.Equal(UserStatus.Locked, user.Status);
+    }
+
+    [Fact]
+    public void Lock_ShouldNotRaiseDomainEvent_WhenLockFails()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.Lock(LockedOnUtc));
+
+        Assert.Empty(user.DomainEvents);
+    }
+
+    [Fact]
+    public void Unlock_ShouldSetStatusToActive_WhenUserIsLocked()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        user.Unlock(UnlockedOnUtc);
+
+        Assert.Equal(UserStatus.Active, user.Status);
+    }
+
+    [Fact]
+    public void Unlock_ShouldRaiseExactlyOneDomainEvent()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        user.Unlock(UnlockedOnUtc);
+
+        Assert.Single(user.DomainEvents);
+    }
+
+    [Fact]
+    public void Unlock_ShouldRaiseUserUnlockedDomainEvent()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        user.Unlock(UnlockedOnUtc);
+
+        Assert.IsType<UserUnlockedDomainEvent>(Assert.Single(user.DomainEvents));
+    }
+
+    [Fact]
+    public void Unlock_ShouldPlaceUserIdInDomainEvent()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        user.Unlock(UnlockedOnUtc);
+
+        var domainEvent = Assert.IsType<UserUnlockedDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(user.Id, domainEvent.UserId);
+    }
+
+    [Fact]
+    public void Unlock_ShouldPlaceOccurrenceTimeInDomainEvent()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        user.Unlock(UnlockedOnUtc);
+
+        var domainEvent = Assert.IsType<UserUnlockedDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(UnlockedOnUtc, domainEvent.OccurredOnUtc);
+    }
+
+    [Fact]
+    public void Unlock_ShouldThrowInvalidOperationException_WhenUserIsPending()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Unlock(UnlockedOnUtc));
+
+        Assert.Equal("Only locked users can be unlocked.", exception.Message);
+    }
+
+    [Fact]
+    public void Unlock_ShouldThrowInvalidOperationException_WhenUserIsActive()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Unlock(UnlockedOnUtc));
+
+        Assert.Equal("Only locked users can be unlocked.", exception.Message);
+    }
+
+    [Fact]
+    public void Unlock_ShouldThrowInvalidOperationException_WhenUserIsDisabled()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Unlock(UnlockedOnUtc));
+
+        Assert.Equal("Only locked users can be unlocked.", exception.Message);
+    }
+
+    [Fact]
+    public void Unlock_ShouldNotChangeStatus_WhenUnlockFails()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.Unlock(UnlockedOnUtc));
+
+        Assert.Equal(UserStatus.Active, user.Status);
+    }
+
+    [Fact]
+    public void Unlock_ShouldNotRaiseDomainEvent_WhenUnlockFails()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.Unlock(UnlockedOnUtc));
+
+        Assert.Empty(user.DomainEvents);
+    }
+
+    [Fact]
+    public void Disable_ShouldThrowInvalidOperationException_WhenUserIsLocked()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Disable(DisabledOnUtc));
+
+        Assert.Equal("Only active users can be disabled.", exception.Message);
+        Assert.Equal(UserStatus.Locked, user.Status);
+        Assert.Empty(user.DomainEvents);
+    }
+
+    [Fact]
+    public void Enable_ShouldThrowInvalidOperationException_WhenUserIsLocked()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Enable(EnabledOnUtc));
+
+        Assert.Equal("Only disabled users can be enabled.", exception.Message);
+        Assert.Equal(UserStatus.Locked, user.Status);
+        Assert.Empty(user.DomainEvents);
+    }
+
+    [Fact]
+    public void VerifyEmail_ShouldThrowInvalidOperationException_WhenUserIsLocked()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.VerifyEmail(EmailVerifiedOnUtc));
+
+        Assert.Equal("Only pending users can verify their email.", exception.Message);
+        Assert.Equal(UserStatus.Locked, user.Status);
+        Assert.Empty(user.DomainEvents);
+    }
+
     private static User CreateUser(
         UserId? id = null,
         Email? email = null,
@@ -449,6 +706,15 @@ public sealed class UserTests
     {
         User user = CreateActiveUserWithoutDomainEvents();
         user.Disable(DisabledOnUtc);
+        user.ClearDomainEvents();
+
+        return user;
+    }
+
+    private static User CreateLockedUserWithoutDomainEvents()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+        user.Lock(LockedOnUtc);
         user.ClearDomainEvents();
 
         return user;
