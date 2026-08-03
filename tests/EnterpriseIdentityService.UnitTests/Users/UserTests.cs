@@ -11,6 +11,9 @@ public sealed class UserTests
     private static readonly DateTimeOffset EmailVerifiedOnUtc =
         new(2026, 8, 3, 9, 0, 0, TimeSpan.Zero);
 
+    private static readonly DateTimeOffset DisabledOnUtc =
+        new(2026, 8, 3, 10, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public void Register_ShouldPreserveSuppliedUserId()
     {
@@ -224,6 +227,101 @@ public sealed class UserTests
         Assert.Empty(user.DomainEvents);
     }
 
+    [Fact]
+    public void Disable_ShouldSetStatusToDisabled_WhenUserIsActive()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Disable(DisabledOnUtc);
+
+        Assert.Equal(UserStatus.Disabled, user.Status);
+    }
+
+    [Fact]
+    public void Disable_ShouldRaiseExactlyOneDomainEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Disable(DisabledOnUtc);
+
+        Assert.Single(user.DomainEvents);
+    }
+
+    [Fact]
+    public void Disable_ShouldRaiseUserDisabledDomainEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Disable(DisabledOnUtc);
+
+        Assert.IsType<UserDisabledDomainEvent>(Assert.Single(user.DomainEvents));
+    }
+
+    [Fact]
+    public void Disable_ShouldPlaceUserIdInDomainEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Disable(DisabledOnUtc);
+
+        var domainEvent = Assert.IsType<UserDisabledDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(user.Id, domainEvent.UserId);
+    }
+
+    [Fact]
+    public void Disable_ShouldPlaceOccurrenceTimeInDomainEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+
+        user.Disable(DisabledOnUtc);
+
+        var domainEvent = Assert.IsType<UserDisabledDomainEvent>(Assert.Single(user.DomainEvents));
+        Assert.Equal(DisabledOnUtc, domainEvent.OccurredOnUtc);
+    }
+
+    [Fact]
+    public void Disable_ShouldThrowInvalidOperationException_WhenUserIsPending()
+    {
+        User user = CreateUser();
+        user.ClearDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Disable(DisabledOnUtc));
+
+        Assert.Equal("Only active users can be disabled.", exception.Message);
+    }
+
+    [Fact]
+    public void Disable_ShouldThrowInvalidOperationException_WhenUserIsAlreadyDisabled()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => user.Disable(DisabledOnUtc));
+
+        Assert.Equal("Only active users can be disabled.", exception.Message);
+    }
+
+    [Fact]
+    public void Disable_ShouldNotChangeStatus_WhenDisableFails()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.Disable(DisabledOnUtc));
+
+        Assert.Equal(UserStatus.Disabled, user.Status);
+    }
+
+    [Fact]
+    public void Disable_ShouldNotRaiseDomainEvent_WhenDisableFails()
+    {
+        User user = CreateDisabledUserWithoutDomainEvents();
+
+        Assert.Throws<InvalidOperationException>(() => user.Disable(DisabledOnUtc));
+
+        Assert.Empty(user.DomainEvents);
+    }
+
     private static User CreateUser(
         UserId? id = null,
         Email? email = null,
@@ -244,6 +342,15 @@ public sealed class UserTests
         User user = CreateUser();
         user.ClearDomainEvents();
         user.VerifyEmail(EmailVerifiedOnUtc);
+        user.ClearDomainEvents();
+
+        return user;
+    }
+
+    private static User CreateDisabledUserWithoutDomainEvents()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+        user.Disable(DisabledOnUtc);
         user.ClearDomainEvents();
 
         return user;
