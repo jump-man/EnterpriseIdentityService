@@ -38,7 +38,8 @@ public sealed class LayerDependencyTests
         [
             "EnterpriseIdentityService.Api",
             "EnterpriseIdentityService.Contracts",
-            "EnterpriseIdentityService.Infrastructure"
+            "EnterpriseIdentityService.Infrastructure",
+            "Microsoft.EntityFrameworkCore"
         ];
 
         AssertDoesNotReference(applicationAssembly, forbiddenDependencies);
