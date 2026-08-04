@@ -9,7 +9,11 @@
 
   <ItemGroup>
 	  <PackageReference Include="coverlet.collector" />
+	  <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+	  <PackageReference Include="Microsoft.Extensions.Configuration" />
+	  <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
 	  <PackageReference Include="Microsoft.NET.Test.Sdk" />
+	  <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
 	  <PackageReference Include="xunit" />
 	  <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
@@ -19,7 +23,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\EnterpriseIdentityService.Api\EnterpriseIdentityService.Api.csproj" />
+    <ProjectReference Include="..\..\src\EnterpriseIdentityService.Application\EnterpriseIdentityService.Application.csproj" />
+    <ProjectReference Include="..\..\src\EnterpriseIdentityService.Domain\EnterpriseIdentityService.Domain.csproj" />
     <ProjectReference Include="..\..\src\EnterpriseIdentityService.Infrastructure\EnterpriseIdentityService.Infrastructure.csproj" />
   </ItemGroup>
 
