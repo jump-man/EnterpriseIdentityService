@@ -26,7 +26,11 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                 new Dictionary<string, string?>
                 {
                     ["ConnectionStrings:Database"] =
-                        "Server=unused;Database=unused;Trusted_Connection=True"
+                        "Server=unused;Database=unused;Trusted_Connection=True",
+                    ["Jwt:Issuer"] = "EnterpriseIdentityService.Tests",
+                    ["Jwt:Audience"] = "EnterpriseIdentityService.Tests.Client",
+                    ["Jwt:SigningKey"] = "test-only-signing-key-with-at-least-thirty-two-characters",
+                    ["Jwt:ExpirationMinutes"] = "15"
                 }));
 
         builder.ConfigureServices(services =>

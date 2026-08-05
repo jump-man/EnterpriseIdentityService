@@ -26,7 +26,11 @@ public sealed class LayerDependencyTests
             "EnterpriseIdentityService.Api",
             "EnterpriseIdentityService.Application",
             "EnterpriseIdentityService.Contracts",
-            "EnterpriseIdentityService.Infrastructure"
+            "EnterpriseIdentityService.Infrastructure",
+            "Microsoft.AspNetCore",
+            "Microsoft.AspNetCore.Authentication.JwtBearer",
+            "Microsoft.IdentityModel.Tokens",
+            "System.IdentityModel.Tokens.Jwt"
         ];
 
         AssertDoesNotReference(domainAssembly, forbiddenDependencies);
@@ -42,7 +46,11 @@ public sealed class LayerDependencyTests
             "EnterpriseIdentityService.Api",
             "EnterpriseIdentityService.Contracts",
             "EnterpriseIdentityService.Infrastructure",
-            "Microsoft.EntityFrameworkCore"
+            "Microsoft.EntityFrameworkCore",
+            "Microsoft.AspNetCore",
+            "Microsoft.AspNetCore.Authentication.JwtBearer",
+            "Microsoft.IdentityModel.Tokens",
+            "System.IdentityModel.Tokens.Jwt"
         ];
 
         AssertDoesNotReference(applicationAssembly, forbiddenDependencies);

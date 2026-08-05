@@ -14,6 +14,7 @@ internal static class RegisterUserEndpoint
                 HandleAsync)
             .WithName("RegisterUser")
             .WithTags("Authentication")
+            .AllowAnonymous()
             .Produces<RegisterUserResponse>(StatusCodes.Status201Created)
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")

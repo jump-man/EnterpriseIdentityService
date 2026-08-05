@@ -29,6 +29,16 @@ public sealed class PasswordHasherTests
         Assert.NotEqual(first, second);
     }
 
+    [Fact]
+    public void Verify_ShouldAcceptCorrectPasswordAndRejectIncorrectPassword()
+    {
+        var passwordHasher = new PasswordHasher();
+        PasswordHash hash = passwordHasher.Hash(Password);
+
+        Assert.True(passwordHasher.Verify(Password, hash));
+        Assert.False(passwordHasher.Verify("incorrect-password", hash));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

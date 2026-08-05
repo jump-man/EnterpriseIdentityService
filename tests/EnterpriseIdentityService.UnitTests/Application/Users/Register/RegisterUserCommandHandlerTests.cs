@@ -203,6 +203,12 @@ public sealed class RegisterUserCommandHandlerTests
 
     private sealed class FakeUserRepository : IUserRepository
     {
+        public Task<User?> GetByEmailAsync(Email email, CancellationToken cancellationToken) =>
+            Task.FromResult<User?>(null);
+
+        public Task<User?> GetByIdAsync(UserId userId, CancellationToken cancellationToken) =>
+            Task.FromResult<User?>(null);
+
         public bool EmailExists { get; init; }
 
         public bool UsernameExists { get; init; }
@@ -243,6 +249,8 @@ public sealed class RegisterUserCommandHandlerTests
             Passwords.Add(password);
             return PasswordHash.Create(HashedPassword);
         }
+
+        public bool Verify(string password, PasswordHash passwordHash) => false;
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork

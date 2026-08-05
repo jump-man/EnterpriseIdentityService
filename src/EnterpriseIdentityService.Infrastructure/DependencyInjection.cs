@@ -6,6 +6,7 @@ using EnterpriseIdentityService.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace EnterpriseIdentityService.Infrastructure;
 
@@ -30,6 +31,12 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IAccessTokenProvider, JwtAccessTokenProvider>();
 
         return services;
     }
