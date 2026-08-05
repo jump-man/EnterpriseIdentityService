@@ -9,6 +9,9 @@ using ContractsAssembly =
 using DomainAssembly =
     EnterpriseIdentityService.Domain.AssemblyReference;
 
+using InfrastructureAssembly =
+    EnterpriseIdentityService.Infrastructure.AssemblyReference;
+
 namespace EnterpriseIdentityService.ArchitectureTests;
 
 public sealed class LayerDependencyTests
@@ -59,6 +62,16 @@ public sealed class LayerDependencyTests
         ];
 
         AssertDoesNotReference(contractsAssembly, forbiddenDependencies);
+    }
+
+    [Fact]
+    public void Infrastructure_should_not_depend_on_api()
+    {
+        Assembly infrastructureAssembly = typeof(InfrastructureAssembly).Assembly;
+
+        AssertDoesNotReference(
+            infrastructureAssembly,
+            ["EnterpriseIdentityService.Api"]);
     }
 
     private static void AssertDoesNotReference(
