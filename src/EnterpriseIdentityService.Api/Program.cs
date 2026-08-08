@@ -2,11 +2,14 @@ using EnterpriseIdentityService.Api.Endpoints.Authentication;
 using EnterpriseIdentityService.Application.Users.Register;
 using EnterpriseIdentityService.Application.Authentication.Login;
 using EnterpriseIdentityService.Application.Users.GetCurrentUser;
+using EnterpriseIdentityService.Application.Users.VerifyEmail;
+using EnterpriseIdentityService.Application.Users.ResendVerificationEmail;
 using EnterpriseIdentityService.Api.Endpoints.Users;
 using EnterpriseIdentityService.Api.Extensions;
 using EnterpriseIdentityService.Infrastructure;
 
 using Microsoft.OpenApi;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,11 +33,27 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<AllowAnonymousOperationFilter>();
 });
 builder.Services.AddProblemDetails();
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("verification-resend", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(15),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddJwtAuthentication();
 builder.Services.AddScoped<RegisterUserCommandHandler>();
 builder.Services.AddScoped<LoginCommandHandler>();
 builder.Services.AddScoped<GetCurrentUserQueryHandler>();
+builder.Services.AddScoped<VerifyEmailCommandHandler>();
+builder.Services.AddScoped<ResendVerificationEmailCommandHandler>();
 
 var app = builder.Build();
 
@@ -53,6 +72,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -67,6 +87,8 @@ app.MapGet(
 app.MapRegisterUserEndpoint();
 app.MapLoginEndpoint();
 app.MapGetCurrentUserEndpoint();
+app.MapVerifyEmailEndpoint();
+app.MapResendVerificationEmailEndpoint();
 
 app.Run();
 

@@ -1,5 +1,7 @@
 using EnterpriseIdentityService.Application.Abstractions.Authentication;
+using EnterpriseIdentityService.Application.Abstractions.Mailing;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
+using EnterpriseIdentityService.Application.EmailVerification;
 using EnterpriseIdentityService.Application.Users.Register;
 using EnterpriseIdentityService.Domain.Users;
 using EnterpriseIdentityService.Domain.Users.Events;
@@ -17,7 +19,7 @@ public sealed class RegisterUserCommandHandlerTests
         var repository = new FakeUserRepository();
         var passwordHasher = new FakePasswordHasher();
         var unitOfWork = new FakeUnitOfWork();
-        var handler = new RegisterUserCommandHandler(repository, passwordHasher, unitOfWork);
+        var handler = CreateHandler(repository, passwordHasher, unitOfWork);
         var command = new RegisterUserCommand(
             "  USER@Example.com ",
             "  ali.dev  ",
@@ -47,7 +49,7 @@ public sealed class RegisterUserCommandHandlerTests
         var repository = new FakeUserRepository { EmailExists = true };
         var passwordHasher = new FakePasswordHasher();
         var unitOfWork = new FakeUnitOfWork();
-        var handler = new RegisterUserCommandHandler(repository, passwordHasher, unitOfWork);
+        var handler = CreateHandler(repository, passwordHasher, unitOfWork);
 
         var result = await handler.Handle(ValidCommand(), CancellationToken.None);
 
@@ -62,7 +64,7 @@ public sealed class RegisterUserCommandHandlerTests
         var repository = new FakeUserRepository { UsernameExists = true };
         var passwordHasher = new FakePasswordHasher();
         var unitOfWork = new FakeUnitOfWork();
-        var handler = new RegisterUserCommandHandler(repository, passwordHasher, unitOfWork);
+        var handler = CreateHandler(repository, passwordHasher, unitOfWork);
 
         var result = await handler.Handle(ValidCommand(), CancellationToken.None);
 
@@ -168,6 +170,20 @@ public sealed class RegisterUserCommandHandlerTests
     private static RegisterUserCommand ValidCommand() =>
         new("user@example.com", "ali.dev", PlainTextPassword);
 
+    private static RegisterUserCommandHandler CreateHandler(
+        IUserRepository repository,
+        IPasswordHasher passwordHasher,
+        IUnitOfWork unitOfWork) => new(
+            repository, passwordHasher, new FakeTokenRepository(),
+            new FakeTokenGenerator(), new FakeTokenHasher(), new FakeEmailFactory(),
+            new FakeEmailSender(), unitOfWork, TimeProvider.System,
+            Microsoft.Extensions.Options.Options.Create(new EmailVerificationOptions
+            {
+                TokenLifetime = TimeSpan.FromHours(24),
+                ResendCooldown = TimeSpan.FromMinutes(1),
+                PublicBaseUrl = "https://localhost"
+            }));
+
     private static void AssertNoWriteOccurred(
         FakeUserRepository repository,
         FakePasswordHasher passwordHasher,
@@ -182,7 +198,7 @@ public sealed class RegisterUserCommandHandlerTests
     {
         public HandlerFixture()
         {
-            Handler = new RegisterUserCommandHandler(Repository, PasswordHasher, UnitOfWork);
+            Handler = CreateHandler(Repository, PasswordHasher, UnitOfWork);
         }
 
         public FakeUserRepository Repository { get; } = new();
@@ -265,5 +281,32 @@ public sealed class RegisterUserCommandHandlerTests
             CancellationToken = cancellationToken;
             return Task.FromResult(1);
         }
+    }
+
+    private sealed class FakeTokenRepository : IEmailVerificationTokenRepository
+    {
+        public Task<EmailVerificationToken?> GetByHashAsync(string tokenHash, CancellationToken cancellationToken) => Task.FromResult<EmailVerificationToken?>(null);
+        public Task<IReadOnlyList<EmailVerificationToken>> GetActiveByUserIdAsync(UserId userId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<EmailVerificationToken>>([]);
+        public void Add(EmailVerificationToken token) { }
+    }
+
+    private sealed class FakeTokenGenerator : IEmailVerificationTokenGenerator
+    {
+        public string Generate() => new string('a', 43);
+    }
+
+    private sealed class FakeTokenHasher : IEmailVerificationTokenHasher
+    {
+        public string Hash(string token) => new string('b', 64);
+    }
+
+    private sealed class FakeEmailFactory : IVerificationEmailFactory
+    {
+        public EmailMessage Create(Email recipient, string rawToken, DateTimeOffset expiresAtUtc, string idempotencyKey) => new(recipient.Value, "subject", "html", "text", idempotencyKey);
+    }
+
+    private sealed class FakeEmailSender : IEmailSender
+    {
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

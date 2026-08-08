@@ -30,6 +30,8 @@ public sealed class User : AggregateRoot<UserId>
 
     public DateTimeOffset CreatedAtUtc { get; }
 
+    public DateTimeOffset? EmailVerifiedAtUtc { get; private set; }
+
     public static User Register(
         UserId id,
         Email email,
@@ -56,6 +58,7 @@ public sealed class User : AggregateRoot<UserId>
         }
 
         Status = UserStatus.Active;
+        EmailVerifiedAtUtc = occurredOnUtc;
 
         RaiseDomainEvent(new UserEmailVerifiedDomainEvent(Id, occurredOnUtc));
     }

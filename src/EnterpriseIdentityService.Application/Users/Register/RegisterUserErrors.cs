@@ -31,4 +31,8 @@ public static class RegisterUserErrors
     public static readonly Error UsernameAlreadyInUse = new(
         "Users.Register.UsernameAlreadyInUse",
         "A user with the supplied username already exists.");
+
+    public static readonly Error EmailDeliveryUnavailable = new(
+        "Users.Register.EmailDeliveryUnavailable",
+        "The account was created, but the verification email could not be delivered. Request another verification email later.");
 }

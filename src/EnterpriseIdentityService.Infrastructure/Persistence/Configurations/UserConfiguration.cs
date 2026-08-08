@@ -54,6 +54,9 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnType("datetimeoffset")
             .IsRequired();
 
+        builder.Property(user => user.EmailVerifiedAtUtc)
+            .HasColumnType("datetimeoffset");
+
         builder.Ignore(user => user.DomainEvents);
     }
 }

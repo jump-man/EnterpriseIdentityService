@@ -18,7 +18,7 @@ internal static class RegisterUserEndpoint
             .Produces<RegisterUserResponse>(StatusCodes.Status201Created)
             .Produces<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")
             .Produces<ProblemDetails>(StatusCodes.Status409Conflict, "application/problem+json")
-            .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError, "application/problem+json");
+            .Produces<ProblemDetails>(StatusCodes.Status503ServiceUnavailable, "application/problem+json");
 
         return endpoints;
     }

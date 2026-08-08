@@ -30,7 +30,8 @@ public sealed class LayerDependencyTests
             "Microsoft.AspNetCore",
             "Microsoft.AspNetCore.Authentication.JwtBearer",
             "Microsoft.IdentityModel.Tokens",
-            "System.IdentityModel.Tokens.Jwt"
+            "System.IdentityModel.Tokens.Jwt",
+            "Resend"
         ];
 
         AssertDoesNotReference(domainAssembly, forbiddenDependencies);
@@ -50,7 +51,8 @@ public sealed class LayerDependencyTests
             "Microsoft.AspNetCore",
             "Microsoft.AspNetCore.Authentication.JwtBearer",
             "Microsoft.IdentityModel.Tokens",
-            "System.IdentityModel.Tokens.Jwt"
+            "System.IdentityModel.Tokens.Jwt",
+            "Resend"
         ];
 
         AssertDoesNotReference(applicationAssembly, forbiddenDependencies);

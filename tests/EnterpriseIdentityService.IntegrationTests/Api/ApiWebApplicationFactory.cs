@@ -1,4 +1,6 @@
 using EnterpriseIdentityService.Infrastructure.Persistence;
+using EnterpriseIdentityService.Application.Abstractions.Mailing;
+using EnterpriseIdentityService.IntegrationTests.TestDoubles;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -30,7 +32,11 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                     ["Jwt:Issuer"] = "EnterpriseIdentityService.Tests",
                     ["Jwt:Audience"] = "EnterpriseIdentityService.Tests.Client",
                     ["Jwt:SigningKey"] = "test-only-signing-key-with-at-least-thirty-two-characters",
-                    ["Jwt:ExpirationMinutes"] = "15"
+                    ["Jwt:ExpirationMinutes"] = "15",
+                    ["EmailVerification:TokenLifetime"] = "1.00:00:00",
+                    ["EmailVerification:ResendCooldown"] = "00:01:00",
+                    ["EmailVerification:PublicBaseUrl"] = "https://localhost",
+                    ["Resend:Enabled"] = "false"
                 }));
 
         builder.ConfigureServices(services =>
@@ -41,6 +47,10 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite(_connection));
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<RecordingEmailSender>();
+            services.AddSingleton<IEmailSender>(provider =>
+                provider.GetRequiredService<RecordingEmailSender>());
         });
     }
 
@@ -52,6 +62,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 
         await context.Database.EnsureDeletedAsync();
         await context.Database.EnsureCreatedAsync();
+        Services.GetRequiredService<RecordingEmailSender>().Clear();
     }
 
     protected override void Dispose(bool disposing)

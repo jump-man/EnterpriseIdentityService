@@ -1,5 +1,6 @@
 using EnterpriseIdentityService.Application.Abstractions;
 using EnterpriseIdentityService.Application.Abstractions.Authentication;
+using EnterpriseIdentityService.Application.Abstractions.Mailing;
 using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
@@ -9,7 +10,14 @@ namespace EnterpriseIdentityService.Application.Users.Register;
 public sealed class RegisterUserCommandHandler(
     IUserRepository userRepository,
     IPasswordHasher passwordHasher,
-    IUnitOfWork unitOfWork)
+    IEmailVerificationTokenRepository tokenRepository,
+    IEmailVerificationTokenGenerator tokenGenerator,
+    IEmailVerificationTokenHasher tokenHasher,
+    IVerificationEmailFactory emailFactory,
+    IEmailSender emailSender,
+    IUnitOfWork unitOfWork,
+    TimeProvider timeProvider,
+    Microsoft.Extensions.Options.IOptions<EmailVerification.EmailVerificationOptions> options)
     : ICommandHandler<RegisterUserCommand, UserId>
 {
     public async Task<Result<UserId>> Handle(
@@ -65,17 +73,43 @@ public sealed class RegisterUserCommandHandler(
 
         PasswordHash passwordHash = passwordHasher.Hash(command.Password);
         UserId userId = UserId.New();
+        DateTimeOffset nowUtc = timeProvider.GetUtcNow();
         User user = User.Register(
             userId,
             email,
             username,
             passwordHash,
-            DateTimeOffset.UtcNow);
+            nowUtc);
+
+        string rawToken = tokenGenerator.Generate();
+        var verificationToken = EmailVerificationToken.Create(
+            EmailVerificationTokenId.New(),
+            userId,
+            tokenHasher.Hash(rawToken),
+            nowUtc,
+            nowUtc.Add(options.Value.TokenLifetime));
 
         // Infrastructure must also enforce unique email and username constraints.
         userRepository.Add(user);
+        tokenRepository.Add(verificationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        EmailMessage message = emailFactory.Create(
+            email,
+            rawToken,
+            verificationToken.ExpiresAtUtc,
+            verificationToken.Id.Value.ToString("N"));
+
+        try
+        {
+            await emailSender.SendAsync(message, cancellationToken);
+        }
+        catch (EmailDeliveryException)
+        {
+            return Result<UserId>.Failure(RegisterUserErrors.EmailDeliveryUnavailable);
+        }
 
         return Result<UserId>.Success(userId);
     }
+
 }
