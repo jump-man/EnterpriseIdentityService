@@ -122,6 +122,23 @@ public sealed class User : AggregateRoot<UserId>
             throw new InvalidOperationException("Only active or locked users can reset their password.");
         }
 
+        ApplyPasswordChange(passwordHash, occurredOnUtc);
+    }
+
+    public void ChangePassword(PasswordHash passwordHash, DateTimeOffset occurredOnUtc)
+    {
+        ArgumentNullException.ThrowIfNull(passwordHash);
+
+        if (Status != UserStatus.Active)
+        {
+            throw new InvalidOperationException("Only active users can change their password.");
+        }
+
+        ApplyPasswordChange(passwordHash, occurredOnUtc);
+    }
+
+    private void ApplyPasswordChange(PasswordHash passwordHash, DateTimeOffset occurredOnUtc)
+    {
         PasswordHash = passwordHash;
         TokenVersion = checked(TokenVersion + 1);
         RaiseDomainEvent(new UserPasswordChangedDomainEvent(Id, occurredOnUtc));

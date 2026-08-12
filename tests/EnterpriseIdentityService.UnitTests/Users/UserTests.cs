@@ -709,6 +709,34 @@ public sealed class UserTests
             CreateDisabledUserWithoutDomainEvents().ResetPassword(PasswordHash.Create("NEW-HASH"), OccurredOnUtc));
     }
 
+    [Fact]
+    public void ChangePassword_ShouldReplaceHashIncrementVersionAndRaiseExistingEvent()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+        PasswordHash hash = PasswordHash.Create("CHANGED-HASH");
+        user.ChangePassword(hash, OccurredOnUtc);
+        Assert.Same(hash, user.PasswordHash);
+        Assert.Equal(1, user.TokenVersion);
+        Assert.IsType<UserPasswordChangedDomainEvent>(Assert.Single(user.DomainEvents));
+    }
+
+    [Fact]
+    public void ChangePassword_ShouldRejectNonActiveStatesWithoutMutation()
+    {
+        User pending = CreateUser();
+        pending.ClearDomainEvents();
+        User[] users = [pending, CreateLockedUserWithoutDomainEvents(), CreateDisabledUserWithoutDomainEvents()];
+        foreach (User user in users)
+        {
+            PasswordHash original = user.PasswordHash;
+            Assert.Throws<InvalidOperationException>(() =>
+                user.ChangePassword(PasswordHash.Create("CHANGED-HASH"), OccurredOnUtc));
+            Assert.Same(original, user.PasswordHash);
+            Assert.Equal(0, user.TokenVersion);
+            Assert.Empty(user.DomainEvents);
+        }
+    }
+
     private static User CreateUser(
         UserId? id = null,
         Email? email = null,

@@ -3,6 +3,7 @@ using EnterpriseIdentityService.Application.Users.Register;
 using EnterpriseIdentityService.Application.Authentication.Login;
 using EnterpriseIdentityService.Application.Users.GetCurrentUser;
 using EnterpriseIdentityService.Application.Users.ResendVerificationEmail;
+using EnterpriseIdentityService.Application.Users.ChangePassword;
 
 namespace EnterpriseIdentityService.Api.Extensions;
 
@@ -17,6 +18,12 @@ internal static class ResultExtensions
             ? StatusCodes.Status401Unauthorized
             : result.Error == GetCurrentUserErrors.NotFound
                 ? StatusCodes.Status404NotFound
+            : result.Error == ChangePasswordErrors.UserNotFound
+                ? StatusCodes.Status401Unauthorized
+            : result.Error == ChangePasswordErrors.Forbidden
+                ? StatusCodes.Status403Forbidden
+            : result.Error == ChangePasswordErrors.ConcurrencyConflict
+                ? StatusCodes.Status409Conflict
             : result.Error == RegisterUserErrors.EmailAlreadyInUse ||
             result.Error == RegisterUserErrors.UsernameAlreadyInUse
                 ? StatusCodes.Status409Conflict
@@ -26,6 +33,7 @@ internal static class ResultExtensions
         {
             StatusCodes.Status401Unauthorized => "Authentication failed.",
             StatusCodes.Status404NotFound => "The requested resource was not found.",
+            StatusCodes.Status403Forbidden => "The operation is forbidden.",
             StatusCodes.Status409Conflict => "A registration conflict occurred.",
             StatusCodes.Status503ServiceUnavailable => "Email delivery is temporarily unavailable.",
             _ => "The request is invalid."

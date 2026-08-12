@@ -6,6 +6,7 @@ using EnterpriseIdentityService.Application.Users.VerifyEmail;
 using EnterpriseIdentityService.Application.Users.ResendVerificationEmail;
 using EnterpriseIdentityService.Application.Users.ForgotPassword;
 using EnterpriseIdentityService.Application.Users.ResetPassword;
+using EnterpriseIdentityService.Application.Users.ChangePassword;
 using EnterpriseIdentityService.Api.Endpoints.Users;
 using EnterpriseIdentityService.Api.Extensions;
 using EnterpriseIdentityService.Infrastructure;
@@ -54,6 +55,14 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true
             }));
+    options.AddPolicy("password-change", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value ??
+                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true
+            }));
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -65,6 +74,7 @@ builder.Services.AddScoped<VerifyEmailCommandHandler>();
 builder.Services.AddScoped<ResendVerificationEmailCommandHandler>();
 builder.Services.AddScoped<ForgotPasswordCommandHandler>();
 builder.Services.AddScoped<ResetPasswordCommandHandler>();
+builder.Services.AddScoped<ChangePasswordCommandHandler>();
 
 var app = builder.Build();
 
@@ -102,6 +112,7 @@ app.MapVerifyEmailEndpoint();
 app.MapResendVerificationEmailEndpoint();
 app.MapForgotPasswordEndpoint();
 app.MapResetPasswordEndpoint();
+app.MapChangePasswordEndpoint();
 
 app.Run();
 
