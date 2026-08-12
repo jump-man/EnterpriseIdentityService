@@ -24,7 +24,9 @@ public sealed class User : AggregateRoot<UserId>
 
     public Username Username { get; }
 
-    public PasswordHash PasswordHash { get; }
+    public PasswordHash PasswordHash { get; private set; }
+
+    public int TokenVersion { get; private set; }
 
     public UserStatus Status { get; private set; }
 
@@ -109,5 +111,19 @@ public sealed class User : AggregateRoot<UserId>
         Status = UserStatus.Active;
 
         RaiseDomainEvent(new UserUnlockedDomainEvent(Id, occurredOnUtc));
+    }
+
+    public void ResetPassword(PasswordHash passwordHash, DateTimeOffset occurredOnUtc)
+    {
+        ArgumentNullException.ThrowIfNull(passwordHash);
+
+        if (Status is not UserStatus.Active and not UserStatus.Locked)
+        {
+            throw new InvalidOperationException("Only active or locked users can reset their password.");
+        }
+
+        PasswordHash = passwordHash;
+        TokenVersion = checked(TokenVersion + 1);
+        RaiseDomainEvent(new UserPasswordChangedDomainEvent(Id, occurredOnUtc));
     }
 }

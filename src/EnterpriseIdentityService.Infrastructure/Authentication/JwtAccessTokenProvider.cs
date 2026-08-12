@@ -27,7 +27,8 @@ internal sealed class JwtAccessTokenProvider(
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(JwtRegisteredClaimNames.Iat,
                 EpochTime.GetIntDate(issuedAt.UtcDateTime).ToString(),
-                ClaimValueTypes.Integer64)
+                ClaimValueTypes.Integer64),
+            new("token_version", user.TokenVersion.ToString(), ClaimValueTypes.Integer32)
         ];
 
         var token = new JwtSecurityToken(

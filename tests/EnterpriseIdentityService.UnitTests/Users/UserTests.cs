@@ -677,6 +677,38 @@ public sealed class UserTests
         Assert.Empty(user.DomainEvents);
     }
 
+    [Fact]
+    public void ResetPassword_ShouldReplaceHashIncrementTokenVersionAndKeepActiveStatus()
+    {
+        User user = CreateActiveUserWithoutDomainEvents();
+        PasswordHash hash = PasswordHash.Create("NEW-HASH");
+
+        user.ResetPassword(hash, OccurredOnUtc);
+
+        Assert.Same(hash, user.PasswordHash);
+        Assert.Equal(1, user.TokenVersion);
+        Assert.Equal(UserStatus.Active, user.Status);
+        Assert.IsType<UserPasswordChangedDomainEvent>(Assert.Single(user.DomainEvents));
+    }
+
+    [Fact]
+    public void ResetPassword_ShouldKeepLockedUserLocked()
+    {
+        User user = CreateLockedUserWithoutDomainEvents();
+        user.ResetPassword(PasswordHash.Create("NEW-HASH"), OccurredOnUtc);
+        Assert.Equal(UserStatus.Locked, user.Status);
+        Assert.Equal(1, user.TokenVersion);
+    }
+
+    [Fact]
+    public void ResetPassword_ShouldRejectPendingAndDisabledUsers()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            CreateUser().ResetPassword(PasswordHash.Create("NEW-HASH"), OccurredOnUtc));
+        Assert.Throws<InvalidOperationException>(() =>
+            CreateDisabledUserWithoutDomainEvents().ResetPassword(PasswordHash.Create("NEW-HASH"), OccurredOnUtc));
+    }
+
     private static User CreateUser(
         UserId? id = null,
         Email? email = null,

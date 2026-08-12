@@ -2,6 +2,7 @@ using EnterpriseIdentityService.Application.Abstractions.Authentication;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Application.Abstractions.Mailing;
 using EnterpriseIdentityService.Application.EmailVerification;
+using EnterpriseIdentityService.Application.PasswordRecovery;
 using EnterpriseIdentityService.Infrastructure.Authentication;
 using EnterpriseIdentityService.Infrastructure.Mailing;
 using EnterpriseIdentityService.Infrastructure.Persistence;
@@ -33,18 +34,27 @@ public static class DependencyInjection
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
+        services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<IEmailVerificationTokenGenerator, EmailVerificationTokenGenerator>();
         services.AddSingleton<IEmailVerificationTokenHasher, EmailVerificationTokenHasher>();
+        services.AddSingleton<IPasswordResetTokenGenerator, PasswordResetTokenGenerator>();
+        services.AddSingleton<IPasswordResetTokenHasher, PasswordResetTokenHasher>();
         services.AddSingleton<IVerificationEmailFactory, VerificationEmailFactory>();
+        services.AddSingleton<IPasswordResetEmailFactory, PasswordResetEmailFactory>();
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
         services.AddOptions<JwtOptions>()
             .Bind(configuration.GetSection(JwtOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IAccessTokenProvider, JwtAccessTokenProvider>();
+        services.AddOptions<PasswordRecoveryOptions>()
+            .Bind(configuration.GetSection(PasswordRecoveryOptions.SectionName))
+            .Validate(x => x.TokenLifetime > TimeSpan.Zero && x.RequestCooldown >= TimeSpan.Zero &&
+                Uri.TryCreate(x.PublicBaseUrl, UriKind.Absolute, out _), "Password recovery options are invalid.")
+            .ValidateOnStart();
 
         services.AddSingleton<IValidateOptions<EmailVerificationOptions>, EmailVerificationOptionsValidator>();
         services.AddOptions<EmailVerificationOptions>()

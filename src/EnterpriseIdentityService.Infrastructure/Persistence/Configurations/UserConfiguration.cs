@@ -57,6 +57,8 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(user => user.EmailVerifiedAtUtc)
             .HasColumnType("datetimeoffset");
 
+        builder.Property(user => user.TokenVersion).HasDefaultValue(0).IsConcurrencyToken();
+
         builder.Ignore(user => user.DomainEvents);
     }
 }

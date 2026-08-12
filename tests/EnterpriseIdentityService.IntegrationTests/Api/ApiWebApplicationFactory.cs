@@ -36,6 +36,9 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                     ["EmailVerification:TokenLifetime"] = "1.00:00:00",
                     ["EmailVerification:ResendCooldown"] = "00:01:00",
                     ["EmailVerification:PublicBaseUrl"] = "https://localhost",
+                    ["PasswordRecovery:TokenLifetime"] = "00:15:00",
+                    ["PasswordRecovery:RequestCooldown"] = "00:01:00",
+                    ["PasswordRecovery:PublicBaseUrl"] = "https://localhost",
                     ["Resend:Enabled"] = "false"
                 }));
 
