@@ -9,7 +9,7 @@ namespace EnterpriseIdentityService.Application.Users.ResetPassword;
 public sealed class ResetPasswordCommandHandler(
     IPasswordResetTokenRepository tokens, IUserRepository users,
     IPasswordResetTokenHasher tokenHasher, IPasswordHasher passwordHasher,
-    IUnitOfWork unitOfWork, TimeProvider timeProvider) : ICommandHandler<ResetPasswordCommand>
+    IUnitOfWork unitOfWork, IUserSessionRepository sessions, TimeProvider timeProvider) : ICommandHandler<ResetPasswordCommand>
 {
     public async Task<Result> Handle(ResetPasswordCommand command, CancellationToken cancellationToken)
     {
@@ -29,6 +29,7 @@ public sealed class ResetPasswordCommandHandler(
         token.Consume(now);
         foreach (PasswordResetToken other in await tokens.GetActiveByUserIdAsync(user.Id, cancellationToken))
             if (other.Id != token.Id && !other.IsConsumed && !other.IsRevoked) other.Revoke(now);
+        foreach (UserSession session in await sessions.GetActiveByUserIdAsync(user.Id, cancellationToken)) session.Revoke(now);
         try { await unitOfWork.SaveChangesAsync(cancellationToken); }
         catch (ConcurrencyException) { return Result.Failure(ResetPasswordErrors.InvalidToken); }
         return Result.Success();

@@ -1,7 +1,9 @@
 using EnterpriseIdentityService.Application.Abstractions.Authentication;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Application.Authentication.Login;
+using EnterpriseIdentityService.Application.Authentication;
 using EnterpriseIdentityService.Domain.Users;
+using Microsoft.Extensions.Options;
 
 namespace EnterpriseIdentityService.UnitTests.Application.Authentication.Login;
 
@@ -16,7 +18,7 @@ public sealed class LoginCommandHandlerTests
         var repository = new FakeUserRepository(user);
         var passwordHasher = new FakePasswordHasher(true);
         var tokenProvider = new FakeAccessTokenProvider();
-        var handler = new LoginCommandHandler(repository, passwordHasher, tokenProvider);
+        var handler = CreateHandler(repository, passwordHasher, tokenProvider);
 
         var result = await handler.Handle(
             new LoginCommand(" USER@example.com ", Password),
@@ -101,6 +103,11 @@ public sealed class LoginCommandHandlerTests
 
     private static LoginCommand ValidCommand() => new("user@example.com", Password);
 
+    private static LoginCommandHandler CreateHandler(IUserRepository users, IPasswordHasher passwords,
+        IAccessTokenProvider accessTokens) => new(users, passwords, accessTokens, new FakeSessions(),
+            new FakeRefreshGenerator(), new FakeRefreshHasher(), new FakeUnitOfWork(), TimeProvider.System,
+            Options.Create(new AuthenticationSessionOptions { Lifetime = TimeSpan.FromDays(30) }));
+
     private static User ActiveUser()
     {
         User user = User.Register(
@@ -115,7 +122,7 @@ public sealed class LoginCommandHandlerTests
         public FakeUserRepository Repository { get; } = new(user);
         public FakePasswordHasher PasswordHasher { get; } = new(passwordMatches);
         public FakeAccessTokenProvider TokenProvider { get; } = new();
-        public LoginCommandHandler Handler => new(Repository, PasswordHasher, TokenProvider);
+        public LoginCommandHandler Handler => CreateHandler(Repository, PasswordHasher, TokenProvider);
     }
 
     private sealed class FakeUserRepository(User? user) : IUserRepository
@@ -153,10 +160,26 @@ public sealed class LoginCommandHandlerTests
         public AccessToken Token { get; } = new(
             "access-token", DateTimeOffset.UtcNow.AddMinutes(15));
         public List<User> Users { get; } = [];
-        public AccessToken Generate(User user)
+        public AccessToken Generate(User user, UserSessionId sessionId)
         {
             Users.Add(user);
             return Token;
         }
+    }
+
+    private sealed class FakeRefreshGenerator : IRefreshTokenGenerator { public string Generate() => new('R', 43); }
+    private sealed class FakeRefreshHasher : IRefreshTokenHasher { public string Hash(string rawToken) => new('A', 64); }
+    private sealed class FakeUnitOfWork : IUnitOfWork
+    {
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(1);
+    }
+    private sealed class FakeSessions : IUserSessionRepository
+    {
+        public Task<UserSession?> GetByIdAsync(UserSessionId id, CancellationToken ct) => Task.FromResult<UserSession?>(null);
+        public Task<RefreshToken?> GetRefreshTokenByHashAsync(string hash, CancellationToken ct) => Task.FromResult<RefreshToken?>(null);
+        public Task<IReadOnlyList<UserSession>> GetActiveByUserIdAsync(UserId id, CancellationToken ct) => Task.FromResult<IReadOnlyList<UserSession>>([]);
+        public Task RevokeAsync(UserSessionId id, UserId userId, DateTimeOffset now, CancellationToken ct) => Task.CompletedTask;
+        public void Add(UserSession session) { }
+        public void Add(RefreshToken token) { }
     }
 }

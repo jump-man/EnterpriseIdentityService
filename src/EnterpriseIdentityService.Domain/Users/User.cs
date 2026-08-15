@@ -143,4 +143,6 @@ public sealed class User : AggregateRoot<UserId>
         TokenVersion = checked(TokenVersion + 1);
         RaiseDomainEvent(new UserPasswordChangedDomainEvent(Id, occurredOnUtc));
     }
+
+    public void InvalidateAuthentication() => TokenVersion = checked(TokenVersion + 1);
 }

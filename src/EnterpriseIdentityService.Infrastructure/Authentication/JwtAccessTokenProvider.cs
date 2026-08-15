@@ -14,7 +14,7 @@ internal sealed class JwtAccessTokenProvider(
 {
     private readonly JwtOptions _options = options.Value;
 
-    public AccessToken Generate(User user)
+    public AccessToken Generate(User user, UserSessionId sessionId)
     {
         ArgumentNullException.ThrowIfNull(user);
 
@@ -28,7 +28,8 @@ internal sealed class JwtAccessTokenProvider(
             new(JwtRegisteredClaimNames.Iat,
                 EpochTime.GetIntDate(issuedAt.UtcDateTime).ToString(),
                 ClaimValueTypes.Integer64),
-            new("token_version", user.TokenVersion.ToString(), ClaimValueTypes.Integer32)
+            new("token_version", user.TokenVersion.ToString(), ClaimValueTypes.Integer32),
+            new("sid", sessionId.Value.ToString())
         ];
 
         var token = new JwtSecurityToken(

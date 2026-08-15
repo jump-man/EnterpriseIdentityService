@@ -4,6 +4,8 @@ using EnterpriseIdentityService.Application.Authentication.Login;
 using EnterpriseIdentityService.Application.Users.GetCurrentUser;
 using EnterpriseIdentityService.Application.Users.ResendVerificationEmail;
 using EnterpriseIdentityService.Application.Users.ChangePassword;
+using EnterpriseIdentityService.Application.Authentication.Refresh;
+using EnterpriseIdentityService.Application.Authentication.LogoutAll;
 
 namespace EnterpriseIdentityService.Api.Extensions;
 
@@ -20,9 +22,13 @@ internal static class ResultExtensions
                 ? StatusCodes.Status404NotFound
             : result.Error == ChangePasswordErrors.UserNotFound
                 ? StatusCodes.Status401Unauthorized
+            : result.Error == RefreshErrors.InvalidToken || result.Error == LogoutAllErrors.InvalidAuthentication
+                ? StatusCodes.Status401Unauthorized
             : result.Error == ChangePasswordErrors.Forbidden
                 ? StatusCodes.Status403Forbidden
             : result.Error == ChangePasswordErrors.ConcurrencyConflict
+                ? StatusCodes.Status409Conflict
+            : result.Error == LogoutAllErrors.Conflict
                 ? StatusCodes.Status409Conflict
             : result.Error == RegisterUserErrors.EmailAlreadyInUse ||
             result.Error == RegisterUserErrors.UsernameAlreadyInUse

@@ -12,6 +12,8 @@ public sealed class ApplicationDbContext(
     internal DbSet<EmailVerificationToken> EmailVerificationTokens =>
         Set<EmailVerificationToken>();
     internal DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    internal DbSet<UserSession> UserSessions => Set<UserSession>();
+    internal DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public override async Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)

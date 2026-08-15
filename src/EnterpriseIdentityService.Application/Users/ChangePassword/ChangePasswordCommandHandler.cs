@@ -11,6 +11,7 @@ public sealed class ChangePasswordCommandHandler(
     IPasswordResetTokenRepository resetTokens,
     IPasswordHasher passwordHasher,
     IUnitOfWork unitOfWork,
+    IUserSessionRepository sessions,
     TimeProvider timeProvider) : ICommandHandler<ChangePasswordCommand>
 {
     public async Task<Result> Handle(ChangePasswordCommand command, CancellationToken cancellationToken)
@@ -33,6 +34,8 @@ public sealed class ChangePasswordCommandHandler(
         user.ChangePassword(passwordHasher.Hash(command.NewPassword), now);
         foreach (PasswordResetToken token in await resetTokens.GetActiveByUserIdAsync(user.Id, cancellationToken))
             if (!token.IsConsumed && !token.IsRevoked) token.Revoke(now);
+        foreach (UserSession session in await sessions.GetActiveByUserIdAsync(user.Id, cancellationToken))
+            session.Revoke(now);
 
         try { await unitOfWork.SaveChangesAsync(cancellationToken); }
         catch (ConcurrencyException) { return Result.Failure(ChangePasswordErrors.ConcurrencyConflict); }

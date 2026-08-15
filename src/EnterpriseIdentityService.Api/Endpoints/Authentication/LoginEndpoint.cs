@@ -38,6 +38,6 @@ internal static class LoginEndpoint
             0,
             (long)(result.Value.ExpiresAtUtc - timeProvider.GetUtcNow()).TotalSeconds);
 
-        return Results.Ok(new LoginResponse(result.Value.AccessToken, "Bearer", expiresIn));
+        return Results.Ok(new LoginResponse(result.Value.AccessToken, result.Value.RefreshToken, "Bearer", expiresIn));
     }
 }

@@ -15,7 +15,7 @@ public sealed class ChangePasswordCommandHandlerTests
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(15));
         var unitOfWork = new FakeUnitOfWork();
         var handler = new ChangePasswordCommandHandler(new FakeUsers(user), new FakeTokens(token),
-            new FakeHasher("current"), unitOfWork, TimeProvider.System);
+            new FakeHasher("current"), unitOfWork, new FakeSessions(), TimeProvider.System);
 
         var result = await handler.Handle(new ChangePasswordCommand(user.Id, "current", "new"), CancellationToken.None);
 
@@ -34,7 +34,7 @@ public sealed class ChangePasswordCommandHandlerTests
         User user = ActiveUser();
         var unitOfWork = new FakeUnitOfWork();
         var handler = new ChangePasswordCommandHandler(new FakeUsers(user), new FakeTokens(),
-            new FakeHasher("current"), unitOfWork, TimeProvider.System);
+            new FakeHasher("current"), unitOfWork, new FakeSessions(), TimeProvider.System);
         var result = await handler.Handle(new ChangePasswordCommand(user.Id, current, next), CancellationToken.None);
         Assert.Equal(errorCode, result.Error.Code);
         Assert.Equal(0, user.TokenVersion);
@@ -81,5 +81,16 @@ public sealed class ChangePasswordCommandHandlerTests
             SaveCalls++;
             return Task.FromResult(1);
         }
+    }
+
+    private sealed class FakeSessions : IUserSessionRepository
+    {
+        public Task<UserSession?> GetByIdAsync(UserSessionId id, CancellationToken ct) => Task.FromResult<UserSession?>(null);
+        public Task<RefreshToken?> GetRefreshTokenByHashAsync(string hash, CancellationToken ct) => Task.FromResult<RefreshToken?>(null);
+        public Task<IReadOnlyList<UserSession>> GetActiveByUserIdAsync(UserId id, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<UserSession>>([]);
+        public Task RevokeAsync(UserSessionId id, UserId userId, DateTimeOffset now, CancellationToken ct) => Task.CompletedTask;
+        public void Add(UserSession session) { }
+        public void Add(RefreshToken token) { }
     }
 }

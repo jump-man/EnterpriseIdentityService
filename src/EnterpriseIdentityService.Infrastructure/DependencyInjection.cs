@@ -3,6 +3,7 @@ using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Application.Abstractions.Mailing;
 using EnterpriseIdentityService.Application.EmailVerification;
 using EnterpriseIdentityService.Application.PasswordRecovery;
+using EnterpriseIdentityService.Application.Authentication;
 using EnterpriseIdentityService.Infrastructure.Authentication;
 using EnterpriseIdentityService.Infrastructure.Mailing;
 using EnterpriseIdentityService.Infrastructure.Persistence;
@@ -35,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+        services.AddScoped<IUserSessionRepository, UserSessionRepository>();
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
@@ -42,6 +44,8 @@ public static class DependencyInjection
         services.AddSingleton<IEmailVerificationTokenHasher, EmailVerificationTokenHasher>();
         services.AddSingleton<IPasswordResetTokenGenerator, PasswordResetTokenGenerator>();
         services.AddSingleton<IPasswordResetTokenHasher, PasswordResetTokenHasher>();
+        services.AddSingleton<IRefreshTokenGenerator, RefreshTokenGenerator>();
+        services.AddSingleton<IRefreshTokenHasher, RefreshTokenHasher>();
         services.AddSingleton<IVerificationEmailFactory, VerificationEmailFactory>();
         services.AddSingleton<IPasswordResetEmailFactory, PasswordResetEmailFactory>();
         services.AddSingleton<TimeProvider>(TimeProvider.System);
@@ -50,6 +54,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(JwtOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IAccessTokenProvider, JwtAccessTokenProvider>();
+        services.AddOptions<AuthenticationSessionOptions>()
+            .Bind(configuration.GetSection(AuthenticationSessionOptions.SectionName))
+            .Validate(x => x.Lifetime > TimeSpan.Zero, "Session lifetime must be positive.")
+            .ValidateOnStart();
         services.AddOptions<PasswordRecoveryOptions>()
             .Bind(configuration.GetSection(PasswordRecoveryOptions.SectionName))
             .Validate(x => x.TokenLifetime > TimeSpan.Zero && x.RequestCooldown >= TimeSpan.Zero &&

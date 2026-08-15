@@ -39,6 +39,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
                     ["PasswordRecovery:TokenLifetime"] = "00:15:00",
                     ["PasswordRecovery:RequestCooldown"] = "00:01:00",
                     ["PasswordRecovery:PublicBaseUrl"] = "https://localhost",
+                    ["AuthenticationSessions:Lifetime"] = "30.00:00:00",
                     ["Resend:Enabled"] = "false"
                 }));
 
