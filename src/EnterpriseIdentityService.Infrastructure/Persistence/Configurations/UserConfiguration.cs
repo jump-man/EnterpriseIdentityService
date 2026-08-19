@@ -59,6 +59,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(user => user.TokenVersion).HasDefaultValue(0).IsConcurrencyToken();
 
+        builder.Property(user => user.AuthorizationVersion)
+            .HasDefaultValue(0)
+            .IsConcurrencyToken();
+
         builder.Ignore(user => user.DomainEvents);
     }
 }

@@ -4,6 +4,8 @@ using EnterpriseIdentityService.Application.Authentication.Login;
 using EnterpriseIdentityService.Application.Authentication;
 using EnterpriseIdentityService.Domain.Users;
 using Microsoft.Extensions.Options;
+using EnterpriseIdentityService.Application.Abstractions.Authorization;
+using EnterpriseIdentityService.Application.Authorization;
 
 namespace EnterpriseIdentityService.UnitTests.Application.Authentication.Login;
 
@@ -105,7 +107,8 @@ public sealed class LoginCommandHandlerTests
 
     private static LoginCommandHandler CreateHandler(IUserRepository users, IPasswordHasher passwords,
         IAccessTokenProvider accessTokens) => new(users, passwords, accessTokens, new FakeSessions(),
-            new FakeRefreshGenerator(), new FakeRefreshHasher(), new FakeUnitOfWork(), TimeProvider.System,
+            new FakeRefreshGenerator(), new FakeRefreshHasher(), new FakeAuthorizationSnapshots(),
+            new FakeUnitOfWork(), TimeProvider.System,
             Options.Create(new AuthenticationSessionOptions { Lifetime = TimeSpan.FromDays(30) }));
 
     private static User ActiveUser()
@@ -160,11 +163,20 @@ public sealed class LoginCommandHandlerTests
         public AccessToken Token { get; } = new(
             "access-token", DateTimeOffset.UtcNow.AddMinutes(15));
         public List<User> Users { get; } = [];
-        public AccessToken Generate(User user, UserSessionId sessionId)
+        public AccessToken Generate(
+            User user,
+            UserSessionId sessionId,
+            AuthorizationSnapshot authorization)
         {
             Users.Add(user);
             return Token;
         }
+    }
+
+    private sealed class FakeAuthorizationSnapshots : IAuthorizationSnapshotProvider
+    {
+        public Task<AuthorizationSnapshot> GetAsync(User user, CancellationToken cancellationToken) =>
+            Task.FromResult(new AuthorizationSnapshot(user.AuthorizationVersion, []));
     }
 
     private sealed class FakeRefreshGenerator : IRefreshTokenGenerator { public string Generate() => new('R', 43); }

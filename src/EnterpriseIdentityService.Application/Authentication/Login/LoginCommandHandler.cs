@@ -5,6 +5,8 @@ using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
 using EnterpriseIdentityService.Application.Authentication;
 using Microsoft.Extensions.Options;
+using EnterpriseIdentityService.Application.Abstractions.Authorization;
+using EnterpriseIdentityService.Application.Authorization;
 
 namespace EnterpriseIdentityService.Application.Authentication.Login;
 
@@ -15,6 +17,7 @@ public sealed class LoginCommandHandler(
     IUserSessionRepository sessions,
     IRefreshTokenGenerator refreshTokenGenerator,
     IRefreshTokenHasher refreshTokenHasher,
+    IAuthorizationSnapshotProvider authorizationSnapshotProvider,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider,
     IOptions<AuthenticationSessionOptions> sessionOptions)
@@ -62,7 +65,9 @@ public sealed class LoginCommandHandler(
         var refreshToken = RefreshToken.Create(RefreshTokenId.New(), session.Id,
             refreshTokenHasher.Hash(rawRefreshToken), now);
         sessions.Add(session); sessions.Add(refreshToken);
-        AccessToken token = accessTokenProvider.Generate(user, session.Id);
+        AuthorizationSnapshot authorization =
+            await authorizationSnapshotProvider.GetAsync(user, cancellationToken);
+        AccessToken token = accessTokenProvider.Generate(user, session.Id, authorization);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<LoginResult>.Success(new LoginResult(token.Value, rawRefreshToken, token.ExpiresAtUtc));

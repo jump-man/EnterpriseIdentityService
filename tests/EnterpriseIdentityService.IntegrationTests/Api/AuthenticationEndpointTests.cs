@@ -134,6 +134,9 @@ public sealed class AuthenticationEndpointTests(ApiWebApplicationFactory factory
 
         Assert.Contains("/api/auth/login", document, StringComparison.Ordinal);
         Assert.Contains("/api/users/me", document, StringComparison.Ordinal);
+        Assert.Contains("/api/permissions", document, StringComparison.Ordinal);
+        Assert.Contains("/api/roles", document, StringComparison.Ordinal);
+        Assert.Contains("/api/users/{userId}/roles", document, StringComparison.Ordinal);
         Assert.Contains("\"Bearer\"", document, StringComparison.Ordinal);
         Assert.Contains("\"scheme\": \"bearer\"", document, StringComparison.Ordinal);
     }

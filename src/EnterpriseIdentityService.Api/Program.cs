@@ -11,6 +11,10 @@ using EnterpriseIdentityService.Application.Authentication.Refresh;
 using EnterpriseIdentityService.Application.Authentication.Logout;
 using EnterpriseIdentityService.Application.Authentication.LogoutAll;
 using EnterpriseIdentityService.Api.Endpoints.Users;
+using EnterpriseIdentityService.Api.Endpoints.Authorization;
+using EnterpriseIdentityService.Application.Authorization.PermissionCatalog;
+using EnterpriseIdentityService.Application.Authorization.Roles;
+using EnterpriseIdentityService.Application.Authorization.UserRoles;
 using EnterpriseIdentityService.Api.Extensions;
 using EnterpriseIdentityService.Infrastructure;
 
@@ -73,10 +77,15 @@ builder.Services.AddRateLimiter(options =>
         httpContext.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 5, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("authorization-mutation", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 30, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true }));
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddJwtAuthentication();
+builder.Services.AddPermissionAuthorization();
 builder.Services.AddScoped<RegisterUserCommandHandler>();
 builder.Services.AddScoped<LoginCommandHandler>();
 builder.Services.AddScoped<GetCurrentUserQueryHandler>();
@@ -88,6 +97,17 @@ builder.Services.AddScoped<ChangePasswordCommandHandler>();
 builder.Services.AddScoped<RefreshCommandHandler>();
 builder.Services.AddScoped<LogoutCommandHandler>();
 builder.Services.AddScoped<LogoutAllCommandHandler>();
+builder.Services.AddScoped<ListPermissionsQueryHandler>();
+builder.Services.AddScoped<ListRolesQueryHandler>();
+builder.Services.AddScoped<GetRoleQueryHandler>();
+builder.Services.AddScoped<CreateRoleCommandHandler>();
+builder.Services.AddScoped<RenameRoleCommandHandler>();
+builder.Services.AddScoped<SetRoleEnabledCommandHandler>();
+builder.Services.AddScoped<DeleteRoleCommandHandler>();
+builder.Services.AddScoped<ReplaceRolePermissionsCommandHandler>();
+builder.Services.AddScoped<ListUserRolesQueryHandler>();
+builder.Services.AddScoped<AssignRoleCommandHandler>();
+builder.Services.AddScoped<RemoveRoleCommandHandler>();
 
 var app = builder.Build();
 
@@ -129,6 +149,7 @@ app.MapChangePasswordEndpoint();
 app.MapRefreshEndpoint();
 app.MapLogoutEndpoint();
 app.MapLogoutAllEndpoint();
+app.MapAuthorizationEndpoints();
 
 app.Run();
 

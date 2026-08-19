@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using System.IdentityModel.Tokens.Jwt;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Abstractions.Authentication;
 
 namespace EnterpriseIdentityService.Api.Extensions;
 
@@ -41,8 +42,12 @@ internal static class AuthenticationExtensions
                     OnTokenValidated = async context =>
                     {
                         string? subject = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-                        string? version = context.Principal?.FindFirst("token_version")?.Value;
-                        if (!Guid.TryParse(subject, out Guid userId) || !int.TryParse(version, out int tokenVersion))
+                        string? version = context.Principal?.FindFirst(CustomClaimTypes.TokenVersion)?.Value;
+                        string? authorizationVersion = context.Principal?
+                            .FindFirst(CustomClaimTypes.AuthorizationVersion)?.Value;
+                        if (!Guid.TryParse(subject, out Guid userId) ||
+                            !int.TryParse(version, out int tokenVersion) ||
+                            !int.TryParse(authorizationVersion, out int currentAuthorizationVersion))
                         {
                             context.Fail("Invalid authentication state.");
                             return;
@@ -50,8 +55,32 @@ internal static class AuthenticationExtensions
 
                         var repository = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
                         User? user = await repository.GetByIdAsync(new UserId(userId), context.HttpContext.RequestAborted);
-                        if (user is null || user.TokenVersion != tokenVersion)
+                        if (user is null ||
+                            user.Status != UserStatus.Active ||
+                            user.TokenVersion != tokenVersion ||
+                            user.AuthorizationVersion != currentAuthorizationVersion)
+                        {
                             context.Fail("Invalid authentication state.");
+                        }
+                    },
+                    OnChallenge = async context =>
+                    {
+                        if (context.Response.HasStarted) return;
+                        context.HandleResponse();
+                        await Results.Problem(
+                            statusCode: StatusCodes.Status401Unauthorized,
+                            title: "Authentication required.",
+                            detail: "A valid current access token is required.")
+                            .ExecuteAsync(context.HttpContext);
+                    },
+                    OnForbidden = async context =>
+                    {
+                        if (context.Response.HasStarted) return;
+                        await Results.Problem(
+                            statusCode: StatusCodes.Status403Forbidden,
+                            title: "The operation is forbidden.",
+                            detail: "The authenticated user does not have the required permission.")
+                            .ExecuteAsync(context.HttpContext);
                     }
                 };
             });

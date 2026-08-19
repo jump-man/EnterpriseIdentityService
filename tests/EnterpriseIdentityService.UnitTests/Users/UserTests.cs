@@ -5,6 +5,17 @@ namespace EnterpriseIdentityService.UnitTests.Users;
 
 public sealed class UserTests
 {
+    [Fact]
+    public void InvalidateAuthorization_ShouldIncrementOnlyAuthorizationVersion()
+    {
+        User user = CreateUser();
+
+        user.InvalidateAuthorization();
+
+        Assert.Equal(1, user.AuthorizationVersion);
+        Assert.Equal(0, user.TokenVersion);
+    }
+
     private static readonly DateTimeOffset OccurredOnUtc =
         new(2026, 8, 3, 8, 30, 0, TimeSpan.Zero);
 

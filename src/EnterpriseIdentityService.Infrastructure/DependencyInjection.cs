@@ -8,6 +8,8 @@ using EnterpriseIdentityService.Infrastructure.Authentication;
 using EnterpriseIdentityService.Infrastructure.Mailing;
 using EnterpriseIdentityService.Infrastructure.Persistence;
 using EnterpriseIdentityService.Infrastructure.Persistence.Repositories;
+using EnterpriseIdentityService.Application.Abstractions.Authorization;
+using EnterpriseIdentityService.Infrastructure.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,6 +39,9 @@ public static class DependencyInjection
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IUserSessionRepository, UserSessionRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+        services.AddScoped<IAuthorizationSnapshotProvider, AuthorizationSnapshotProvider>();
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
         services.AddSingleton<IPasswordHasher, PasswordHasher>();

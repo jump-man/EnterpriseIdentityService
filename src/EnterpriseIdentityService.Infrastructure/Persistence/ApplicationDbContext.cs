@@ -1,5 +1,6 @@
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnterpriseIdentityService.Infrastructure.Persistence;
@@ -14,6 +15,9 @@ public sealed class ApplicationDbContext(
     internal DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     internal DbSet<UserSession> UserSessions => Set<UserSession>();
     internal DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    internal DbSet<Role> Roles => Set<Role>();
+    internal DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    internal DbSet<UserRole> UserRoles => Set<UserRole>();
 
     public override async Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)

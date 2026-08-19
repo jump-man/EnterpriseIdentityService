@@ -28,6 +28,8 @@ public sealed class User : AggregateRoot<UserId>
 
     public int TokenVersion { get; private set; }
 
+    public int AuthorizationVersion { get; private set; }
+
     public UserStatus Status { get; private set; }
 
     public DateTimeOffset CreatedAtUtc { get; }
@@ -145,4 +147,7 @@ public sealed class User : AggregateRoot<UserId>
     }
 
     public void InvalidateAuthentication() => TokenVersion = checked(TokenVersion + 1);
+
+    public void InvalidateAuthorization() =>
+        AuthorizationVersion = checked(AuthorizationVersion + 1);
 }

@@ -4,6 +4,8 @@ using EnterpriseIdentityService.Domain.Users;
 using EnterpriseIdentityService.Infrastructure.Authentication;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using EnterpriseIdentityService.Application.Abstractions.Authentication;
+using EnterpriseIdentityService.Application.Authorization;
 
 namespace EnterpriseIdentityService.IntegrationTests.Infrastructure.Authentication;
 
@@ -22,7 +24,10 @@ public sealed class JwtTests
         User user = ActiveUser();
         UserSessionId sessionId = UserSessionId.New();
 
-        var result = provider.Generate(user, sessionId);
+        var authorization = new AuthorizationSnapshot(
+            user.AuthorizationVersion,
+            [Permissions.Roles.Read, Permissions.UserRoles.Manage]);
+        var result = provider.Generate(user, sessionId, authorization);
         var handler = new JwtSecurityTokenHandler();
         TokenValidationParameters validationParameters = ValidationParameters(options);
         validationParameters.LifetimeValidator = (notBefore, expires, _, _) =>
@@ -33,8 +38,12 @@ public sealed class JwtTests
         Assert.Equal(now.AddMinutes(15), result.ExpiresAtUtc);
         Assert.Equal(user.Id.Value.ToString(), token.Subject);
         Assert.False(string.IsNullOrWhiteSpace(token.Id));
-        Assert.Equal(user.TokenVersion.ToString(), token.Claims.Single(x => x.Type == "token_version").Value);
-        Assert.Equal(sessionId.Value.ToString(), token.Claims.Single(x => x.Type == "sid").Value);
+        Assert.Equal(user.TokenVersion.ToString(), token.Claims.Single(x => x.Type == CustomClaimTypes.TokenVersion).Value);
+        Assert.Equal(user.AuthorizationVersion.ToString(),
+            token.Claims.Single(x => x.Type == CustomClaimTypes.AuthorizationVersion).Value);
+        Assert.Equal(sessionId.Value.ToString(), token.Claims.Single(x => x.Type == CustomClaimTypes.SessionId).Value);
+        Assert.Equal(authorization.Permissions,
+            token.Claims.Where(x => x.Type == CustomClaimTypes.Permission).Select(x => x.Value));
         Assert.Equal(SecurityAlgorithms.HmacSha256, token.SignatureAlgorithm);
         Assert.DoesNotContain(token.Claims, claim =>
             claim.Type.Contains("password", StringComparison.OrdinalIgnoreCase));
@@ -46,7 +55,11 @@ public sealed class JwtTests
         JwtOptions options = ValidOptions();
         var provider = new JwtAccessTokenProvider(
             Options.Create(options), TimeProvider.System);
-        string token = provider.Generate(ActiveUser(), UserSessionId.New()).Value;
+        User user = ActiveUser();
+        string token = provider.Generate(
+            user,
+            UserSessionId.New(),
+            new AuthorizationSnapshot(user.AuthorizationVersion, [])).Value;
         var handler = new JwtSecurityTokenHandler();
 
         TokenValidationParameters wrongKey = ValidationParameters(options);
