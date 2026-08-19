@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using EnterpriseIdentityService.Application.Authentication.Logout;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Api.Extensions;
 namespace EnterpriseIdentityService.Api.Endpoints.Authentication;
 internal static class LogoutEndpoint
 {
@@ -14,7 +15,8 @@ internal static class LogoutEndpoint
     {
         if (!Guid.TryParse(context.User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out Guid userId) ||
             !Guid.TryParse(context.User.FindFirst("sid")?.Value, out Guid sessionId)) return Results.Unauthorized();
-        await handler.Handle(new LogoutCommand(new UserId(userId), new UserSessionId(sessionId)), ct);
-        return Results.NoContent();
+        var result = await handler.Handle(
+            new LogoutCommand(new UserId(userId), new UserSessionId(sessionId)), ct);
+        return result.IsSuccess ? Results.NoContent() : result.ToProblem();
     }
 }

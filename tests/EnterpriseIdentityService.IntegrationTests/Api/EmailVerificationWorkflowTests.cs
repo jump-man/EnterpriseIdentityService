@@ -11,6 +11,7 @@ using EnterpriseIdentityService.IntegrationTests.TestDoubles;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.IntegrationTests.Api;
 
@@ -64,6 +65,12 @@ public sealed partial class EmailVerificationWorkflowTests(ApiWebApplicationFact
             Assert.Equal(UserStatus.Active, user.Status);
             Assert.NotNull(user.EmailVerifiedAtUtc);
             Assert.NotNull(storedToken.ConsumedAtUtc);
+            AuditEntry verified = await context.Set<AuditEntry>().SingleAsync(
+                entry => entry.EventType == AuditEventType.EmailVerified);
+            Assert.Equal(user.Id, verified.TargetUserId);
+            Assert.DoesNotContain(rawToken,
+                string.Join('|', verified.CorrelationId, verified.UserAgent, verified.Permission),
+                StringComparison.Ordinal);
         }
 
         HttpResponseMessage reuse = await client.PostAsJsonAsync(

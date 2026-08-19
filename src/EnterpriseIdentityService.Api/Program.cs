@@ -16,6 +16,10 @@ using EnterpriseIdentityService.Application.Authorization.PermissionCatalog;
 using EnterpriseIdentityService.Application.Authorization.Roles;
 using EnterpriseIdentityService.Application.Authorization.UserRoles;
 using EnterpriseIdentityService.Api.Extensions;
+using EnterpriseIdentityService.Api.Auditing;
+using EnterpriseIdentityService.Application.Abstractions.Auditing;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Api.Endpoints.Auditing;
 using EnterpriseIdentityService.Infrastructure;
 
 using Microsoft.OpenApi;
@@ -81,9 +85,16 @@ builder.Services.AddRateLimiter(options =>
         httpContext.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
         { PermitLimit = 30, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("audit-read", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 60, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true }));
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuditContextProvider, HttpAuditContextProvider>();
+builder.Services.AddScoped<AuditRecorder>();
 builder.Services.AddJwtAuthentication();
 builder.Services.AddPermissionAuthorization();
 builder.Services.AddScoped<RegisterUserCommandHandler>();
@@ -108,6 +119,7 @@ builder.Services.AddScoped<ReplaceRolePermissionsCommandHandler>();
 builder.Services.AddScoped<ListUserRolesQueryHandler>();
 builder.Services.AddScoped<AssignRoleCommandHandler>();
 builder.Services.AddScoped<RemoveRoleCommandHandler>();
+builder.Services.AddScoped<QueryAuditEntriesQueryHandler>();
 
 var app = builder.Build();
 
@@ -150,6 +162,7 @@ app.MapRefreshEndpoint();
 app.MapLogoutEndpoint();
 app.MapLogoutAllEndpoint();
 app.MapAuthorizationEndpoints();
+app.MapAuditEndpoint();
 
 app.Run();
 

@@ -2,12 +2,18 @@ using EnterpriseIdentityService.Application.Abstractions;
 using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Roles;
+using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Authorization.Roles;
 
-public sealed record RenameRoleCommand(RoleId RoleId, string Name) : ICommand<RoleResult>;
+public sealed record RenameRoleCommand(UserId ActorUserId, RoleId RoleId, string Name) : ICommand<RoleResult>;
 
-public sealed class RenameRoleCommandHandler(IRoleRepository roles, IUnitOfWork unitOfWork)
+public sealed class RenameRoleCommandHandler(
+    IRoleRepository roles,
+    AuditRecorder audit,
+    IUnitOfWork unitOfWork)
     : ICommandHandler<RenameRoleCommand, RoleResult>
 {
     public async Task<Result<RoleResult>> Handle(
@@ -22,6 +28,13 @@ public sealed class RenameRoleCommandHandler(IRoleRepository roles, IUnitOfWork 
 
         if (role.IsSystem)
         {
+            audit.Record(
+                AuditEventType.AuthorizationChangeRejected,
+                AuditOutcome.Failure,
+                AuditReasonCode.ProtectedSystemRole,
+                actorUserId: command.ActorUserId,
+                roleId: role.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<RoleResult>.Failure(AuthorizationErrors.SystemRoleProtected);
         }
 
@@ -42,6 +55,10 @@ public sealed class RenameRoleCommandHandler(IRoleRepository roles, IUnitOfWork 
         }
 
         role.Rename(command.Name);
+        audit.Record(
+            AuditEventType.RoleRenamed,
+            actorUserId: command.ActorUserId,
+            roleId: role.Id);
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);

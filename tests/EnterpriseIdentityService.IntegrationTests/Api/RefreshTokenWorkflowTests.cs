@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.RateLimiting;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.IntegrationTests.Api;
 public sealed partial class RefreshTokenWorkflowTests(ApiWebApplicationFactory factory) : IClassFixture<ApiWebApplicationFactory>
@@ -41,12 +42,22 @@ public sealed partial class RefreshTokenWorkflowTests(ApiWebApplicationFactory f
             Assert.NotNull(tokens[0].ConsumedAtUtc);
             Assert.Null(tokens[1].ConsumedAtUtc);
             Assert.DoesNotContain(tokens, x => x.TokenHash == rotated.RefreshToken);
+            Assert.Single(await db.Set<AuditEntry>().Where(
+                entry => entry.EventType == AuditEventType.SessionRefreshed).ToArrayAsync());
         }
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(login.RefreshToken))).StatusCode);
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             Assert.NotNull((await db.Set<UserSession>().SingleAsync()).RevokedAtUtc);
+            AuditEntry replay = await db.Set<AuditEntry>().SingleAsync(
+                entry => entry.EventType == AuditEventType.RefreshTokenReplayDetected);
+            Assert.Equal(AuditOutcome.Detected, replay.Outcome);
+            Assert.Equal(AuditReasonCode.RefreshTokenReplay, replay.ReasonCode);
+            Assert.NotNull(replay.SessionId);
+            Assert.DoesNotContain(login.RefreshToken,
+                string.Join('|', replay.CorrelationId, replay.UserAgent, replay.Permission),
+                StringComparison.Ordinal);
         }
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(rotated.RefreshToken))).StatusCode);
     }
@@ -78,6 +89,13 @@ public sealed partial class RefreshTokenWorkflowTests(ApiWebApplicationFactory f
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             Assert.Equal(1, (await db.Set<User>().SingleAsync()).TokenVersion);
             Assert.All(await db.Set<UserSession>().ToArrayAsync(), session => Assert.NotNull(session.RevokedAtUtc));
+            AuditEventType[] events = await db.Set<AuditEntry>()
+                .Where(entry => entry.EventType == AuditEventType.Logout ||
+                                entry.EventType == AuditEventType.LogoutAllDevices)
+                .Select(entry => entry.EventType)
+                .ToArrayAsync();
+            Assert.Contains(AuditEventType.Logout, events);
+            Assert.Contains(AuditEventType.LogoutAllDevices, events);
         }
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/users/me")).StatusCode);
         client.DefaultRequestHeaders.Authorization = null;

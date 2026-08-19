@@ -4,6 +4,8 @@ using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Roles;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Authorization.Roles;
 
@@ -16,6 +18,7 @@ public sealed class SetRoleEnabledCommandHandler(
     IRoleRepository roles,
     IUserRepository users,
     IAuthorizationSnapshotProvider authorizationSnapshots,
+    AuditRecorder audit,
     IUnitOfWork unitOfWork)
     : ICommandHandler<SetRoleEnabledCommand, RoleResult>
 {
@@ -31,6 +34,13 @@ public sealed class SetRoleEnabledCommandHandler(
 
         if (role.IsSystem)
         {
+            audit.Record(
+                AuditEventType.AuthorizationChangeRejected,
+                AuditOutcome.Failure,
+                AuditReasonCode.ProtectedSystemRole,
+                actorUserId: command.ActorUserId,
+                roleId: role.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<RoleResult>.Failure(AuthorizationErrors.SystemRoleProtected);
         }
 
@@ -51,6 +61,13 @@ public sealed class SetRoleEnabledCommandHandler(
                 .All(permission => actorAuthorization.Permissions.Contains(
                     permission, StringComparer.Ordinal)))
         {
+            audit.Record(
+                AuditEventType.AuthorizationChangeRejected,
+                AuditOutcome.Failure,
+                AuditReasonCode.GrantCeilingViolation,
+                actorUserId: command.ActorUserId,
+                roleId: role.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<RoleResult>.Failure(AuthorizationErrors.GrantCeilingExceeded);
         }
 
@@ -69,6 +86,11 @@ public sealed class SetRoleEnabledCommandHandler(
         {
             affectedUser.InvalidateAuthorization();
         }
+
+        audit.Record(
+            command.IsEnabled ? AuditEventType.RoleEnabled : AuditEventType.RoleDisabled,
+            actorUserId: command.ActorUserId,
+            roleId: role.Id);
 
         try
         {

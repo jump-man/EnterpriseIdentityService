@@ -1,6 +1,7 @@
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
 using EnterpriseIdentityService.Domain.Roles;
+using EnterpriseIdentityService.Domain.Auditing;
 using Microsoft.EntityFrameworkCore;
 
 namespace EnterpriseIdentityService.Infrastructure.Persistence;
@@ -18,10 +19,13 @@ public sealed class ApplicationDbContext(
     internal DbSet<Role> Roles => Set<Role>();
     internal DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     internal DbSet<UserRole> UserRoles => Set<UserRole>();
+    internal DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
     public override async Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)
     {
+        EnsureAuditEntriesAreAppendOnly();
+
         try
         {
             return await base.SaveChangesAsync(cancellationToken);
@@ -30,6 +34,30 @@ public sealed class ApplicationDbContext(
         {
             throw new ConcurrencyException(
                 "The data was changed by another operation.", exception);
+        }
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnsureAuditEntriesAreAppendOnly();
+
+        try
+        {
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new ConcurrencyException(
+                "The data was changed by another operation.", exception);
+        }
+    }
+
+    private void EnsureAuditEntriesAreAppendOnly()
+    {
+        if (ChangeTracker.Entries<AuditEntry>().Any(entry =>
+                entry.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Security audit entries are append-only.");
         }
     }
 

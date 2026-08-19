@@ -22,6 +22,92 @@ namespace EnterpriseIdentityService.Infrastructure.Persistence.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("EnterpriseIdentityService.Domain.Auditing.AuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("OccurredAtUtcTicks")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Permission")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid?>("RoleId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SortId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("char(32)")
+                        .IsFixedLength();
+
+                    b.Property<Guid?>("TargetUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("OccurredAtUtcTicks", "SortId")
+                        .IsDescending();
+
+                    b.HasIndex("ActorUserId", "OccurredAtUtcTicks", "SortId")
+                        .IsDescending(false, true, true);
+
+                    b.HasIndex("EventType", "OccurredAtUtcTicks", "SortId")
+                        .IsDescending(false, true, true);
+
+                    b.HasIndex("RoleId", "OccurredAtUtcTicks", "SortId")
+                        .IsDescending(false, true, true);
+
+                    b.HasIndex("SessionId", "OccurredAtUtcTicks", "SortId")
+                        .IsDescending(false, true, true);
+
+                    b.HasIndex("TargetUserId", "OccurredAtUtcTicks", "SortId")
+                        .IsDescending(false, true, true);
+
+                    b.ToTable("AuditEntries", "identity");
+                });
+
             modelBuilder.Entity("EnterpriseIdentityService.Domain.Roles.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -103,6 +189,11 @@ namespace EnterpriseIdentityService.Infrastructure.Persistence.Migrations
                         {
                             RoleId = new Guid("7d8f6e36-72a1-4f91-9b0f-8bf83ed7247c"),
                             Permission = "users.roles.manage"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("7d8f6e36-72a1-4f91-9b0f-8bf83ed7247c"),
+                            Permission = "audit.read"
                         });
                 });
 

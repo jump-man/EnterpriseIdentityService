@@ -2,6 +2,8 @@ using EnterpriseIdentityService.Application.Abstractions.Authentication;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Application.Users.ChangePassword;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.UnitTests.TestDoubles;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.UnitTests.Application.Users.ChangePassword;
 
@@ -14,8 +16,10 @@ public sealed class ChangePasswordCommandHandlerTests
         var token = PasswordResetToken.Create(PasswordResetTokenId.New(), user.Id, new string('A', 64),
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(15));
         var unitOfWork = new FakeUnitOfWork();
+        var auditEntries = new FakeAuditEntryRepository();
         var handler = new ChangePasswordCommandHandler(new FakeUsers(user), new FakeTokens(token),
-            new FakeHasher("current"), unitOfWork, new FakeSessions(), TimeProvider.System);
+            new FakeHasher("current"), unitOfWork, new FakeSessions(), TestAudit.Create(auditEntries),
+            TimeProvider.System);
 
         var result = await handler.Handle(new ChangePasswordCommand(user.Id, "current", "new"), CancellationToken.None);
 
@@ -24,6 +28,7 @@ public sealed class ChangePasswordCommandHandlerTests
         Assert.Equal(1, user.TokenVersion);
         Assert.True(token.IsRevoked);
         Assert.Equal(1, unitOfWork.SaveCalls);
+        Assert.Equal(AuditEventType.PasswordChanged, Assert.Single(auditEntries.Entries).EventType);
     }
 
     [Theory]
@@ -34,7 +39,8 @@ public sealed class ChangePasswordCommandHandlerTests
         User user = ActiveUser();
         var unitOfWork = new FakeUnitOfWork();
         var handler = new ChangePasswordCommandHandler(new FakeUsers(user), new FakeTokens(),
-            new FakeHasher("current"), unitOfWork, new FakeSessions(), TimeProvider.System);
+            new FakeHasher("current"), unitOfWork, new FakeSessions(), TestAudit.Create(),
+            TimeProvider.System);
         var result = await handler.Handle(new ChangePasswordCommand(user.Id, current, next), CancellationToken.None);
         Assert.Equal(errorCode, result.Error.Code);
         Assert.Equal(0, user.TokenVersion);

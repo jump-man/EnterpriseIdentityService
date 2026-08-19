@@ -11,6 +11,7 @@ using EnterpriseIdentityService.IntegrationTests.TestDoubles;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.IntegrationTests.Api;
 
@@ -52,6 +53,21 @@ public sealed partial class PasswordRecoveryWorkflowTests(ApiWebApplicationFacto
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", oldLogin.AccessToken);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/users/me")).StatusCode);
+
+        await using AsyncServiceScope auditScope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext auditContext =
+            auditScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        AuditEventType[] auditEvents = await auditContext.Set<AuditEntry>()
+            .Where(entry => entry.EventType == AuditEventType.PasswordResetRequested ||
+                            entry.EventType == AuditEventType.PasswordResetCompleted)
+            .Select(entry => entry.EventType)
+            .ToArrayAsync();
+        Assert.Contains(AuditEventType.PasswordResetRequested, auditEvents);
+        Assert.Contains(AuditEventType.PasswordResetCompleted, auditEvents);
+        string persistedAuditText = string.Join('|', (await auditContext.Set<AuditEntry>().ToArrayAsync())
+            .SelectMany(entry => new[] { entry.CorrelationId, entry.UserAgent, entry.Permission })
+            .OfType<string>());
+        Assert.DoesNotContain(resetToken, persistedAuditText, StringComparison.Ordinal);
     }
 
     [Fact]

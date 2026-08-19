@@ -3,6 +3,8 @@ using EnterpriseIdentityService.Application.Abstractions.Authentication;
 using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Users.VerifyEmail;
 
@@ -11,6 +13,7 @@ public sealed class VerifyEmailCommandHandler(
     IUserRepository userRepository,
     IEmailVerificationTokenHasher tokenHasher,
     IUnitOfWork unitOfWork,
+    AuditRecorder audit,
     TimeProvider timeProvider) : ICommandHandler<VerifyEmailCommand>
 {
     public async Task<Result> Handle(
@@ -48,6 +51,9 @@ public sealed class VerifyEmailCommandHandler(
 
         user.VerifyEmail(nowUtc);
         token.Consume(nowUtc);
+        audit.Record(
+            AuditEventType.EmailVerified,
+            targetUserId: user.Id);
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);

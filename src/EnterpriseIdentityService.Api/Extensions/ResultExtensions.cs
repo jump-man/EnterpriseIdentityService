@@ -7,6 +7,7 @@ using EnterpriseIdentityService.Application.Users.ChangePassword;
 using EnterpriseIdentityService.Application.Authentication.Refresh;
 using EnterpriseIdentityService.Application.Authentication.LogoutAll;
 using EnterpriseIdentityService.Application.Authorization;
+using EnterpriseIdentityService.Application.Authentication.Logout;
 
 namespace EnterpriseIdentityService.Api.Extensions;
 
@@ -27,6 +28,7 @@ internal static class ResultExtensions
               result.Error == AuthorizationErrors.RoleNotAssigned ||
               result.Error == AuthorizationErrors.LastAdministratorRequired ||
               result.Error == AuthorizationErrors.ConcurrencyConflict
+              || result.Error == LogoutErrors.Conflict
             ? StatusCodes.Status409Conflict
             : result.Error == RegisterUserErrors.EmailDeliveryUnavailable ||
             result.Error == ResendVerificationEmailErrors.EmailDeliveryUnavailable

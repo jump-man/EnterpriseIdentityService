@@ -10,6 +10,7 @@ using EnterpriseIdentityService.Infrastructure.Persistence;
 using EnterpriseIdentityService.Infrastructure.Persistence.Repositories;
 using EnterpriseIdentityService.Application.Abstractions.Authorization;
 using EnterpriseIdentityService.Infrastructure.Authorization;
+using EnterpriseIdentityService.Infrastructure.Persistence.Queries;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +43,8 @@ public static class DependencyInjection
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<IAuthorizationSnapshotProvider, AuthorizationSnapshotProvider>();
+        services.AddScoped<IAuditEntryRepository, AuditEntryRepository>();
+        services.AddScoped<IAuditEntryQuery, AuditEntryQuery>();
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
         services.AddSingleton<IPasswordHasher, PasswordHasher>();

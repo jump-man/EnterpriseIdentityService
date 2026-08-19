@@ -4,6 +4,8 @@ using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Roles;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Authorization.Roles;
 
@@ -16,6 +18,7 @@ public sealed class ReplaceRolePermissionsCommandHandler(
     IRoleRepository roles,
     IUserRepository users,
     IAuthorizationSnapshotProvider authorizationSnapshots,
+    AuditRecorder audit,
     IUnitOfWork unitOfWork)
     : ICommandHandler<ReplaceRolePermissionsCommand, RoleResult>
 {
@@ -39,6 +42,13 @@ public sealed class ReplaceRolePermissionsCommandHandler(
 
         if (role.IsSystem)
         {
+            audit.Record(
+                AuditEventType.AuthorizationChangeRejected,
+                AuditOutcome.Failure,
+                AuditReasonCode.ProtectedSystemRole,
+                actorUserId: command.ActorUserId,
+                roleId: role.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<RoleResult>.Failure(AuthorizationErrors.SystemRoleProtected);
         }
 
@@ -53,6 +63,13 @@ public sealed class ReplaceRolePermissionsCommandHandler(
         if (!requested.All(permission =>
                 actorAuthorization.Permissions.Contains(permission, StringComparer.Ordinal)))
         {
+            audit.Record(
+                AuditEventType.AuthorizationChangeRejected,
+                AuditOutcome.Failure,
+                AuditReasonCode.GrantCeilingViolation,
+                actorUserId: command.ActorUserId,
+                roleId: role.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<RoleResult>.Failure(AuthorizationErrors.GrantCeilingExceeded);
         }
 
@@ -68,6 +85,25 @@ public sealed class ReplaceRolePermissionsCommandHandler(
         foreach (User affectedUser in affectedUsers)
         {
             affectedUser.InvalidateAuthorization();
+        }
+
+
+        foreach (string permission in requested.Except(current, StringComparer.Ordinal))
+        {
+            audit.Record(
+                AuditEventType.PermissionGrantedToRole,
+                actorUserId: command.ActorUserId,
+                roleId: role.Id,
+                permission: permission);
+        }
+
+        foreach (string permission in current.Except(requested, StringComparer.Ordinal))
+        {
+            audit.Record(
+                AuditEventType.PermissionRevokedFromRole,
+                actorUserId: command.ActorUserId,
+                roleId: role.Id,
+                permission: permission);
         }
 
         try

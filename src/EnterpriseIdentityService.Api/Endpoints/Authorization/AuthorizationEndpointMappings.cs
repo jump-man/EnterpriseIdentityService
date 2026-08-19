@@ -100,10 +100,13 @@ internal static class AuthorizationEndpointMappings
 
     private static async Task<IResult> CreateRoleAsync(
         CreateRoleRequest request,
+        HttpContext context,
         CreateRoleCommandHandler handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler.Handle(new CreateRoleCommand(request.Name), cancellationToken);
+        if (!context.User.TryGetUserId(out UserId actorId)) return Results.Unauthorized();
+        var result = await handler.Handle(
+            new CreateRoleCommand(actorId, request.Name), cancellationToken);
         return result.IsSuccess
             ? Results.Created($"/api/roles/{result.Value.Id}", ToResponse(result.Value))
             : result.ToProblem();
@@ -112,12 +115,14 @@ internal static class AuthorizationEndpointMappings
     private static async Task<IResult> RenameRoleAsync(
         Guid roleId,
         RenameRoleRequest request,
+        HttpContext context,
         RenameRoleCommandHandler handler,
         CancellationToken cancellationToken)
     {
         if (roleId == Guid.Empty) return InvalidIdentifier();
+        if (!context.User.TryGetUserId(out UserId actorId)) return Results.Unauthorized();
         var result = await handler.Handle(
-            new RenameRoleCommand(new RoleId(roleId), request.Name), cancellationToken);
+            new RenameRoleCommand(actorId, new RoleId(roleId), request.Name), cancellationToken);
         return result.IsSuccess ? Results.Ok(ToResponse(result.Value)) : result.ToProblem();
     }
 
@@ -143,10 +148,13 @@ internal static class AuthorizationEndpointMappings
     }
 
     private static async Task<IResult> DeleteRoleAsync(
-        Guid roleId, DeleteRoleCommandHandler handler, CancellationToken cancellationToken)
+        Guid roleId, HttpContext context, DeleteRoleCommandHandler handler,
+        CancellationToken cancellationToken)
     {
         if (roleId == Guid.Empty) return InvalidIdentifier();
-        var result = await handler.Handle(new DeleteRoleCommand(new RoleId(roleId)), cancellationToken);
+        if (!context.User.TryGetUserId(out UserId actorId)) return Results.Unauthorized();
+        var result = await handler.Handle(
+            new DeleteRoleCommand(actorId, new RoleId(roleId)), cancellationToken);
         return result.IsSuccess ? Results.NoContent() : result.ToProblem();
     }
 

@@ -3,6 +3,8 @@ using EnterpriseIdentityService.Application.Abstractions.Authentication;
 using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Users.ChangePassword;
 
@@ -12,6 +14,7 @@ public sealed class ChangePasswordCommandHandler(
     IPasswordHasher passwordHasher,
     IUnitOfWork unitOfWork,
     IUserSessionRepository sessions,
+    AuditRecorder audit,
     TimeProvider timeProvider) : ICommandHandler<ChangePasswordCommand>
 {
     public async Task<Result> Handle(ChangePasswordCommand command, CancellationToken cancellationToken)
@@ -36,6 +39,11 @@ public sealed class ChangePasswordCommandHandler(
             if (!token.IsConsumed && !token.IsRevoked) token.Revoke(now);
         foreach (UserSession session in await sessions.GetActiveByUserIdAsync(user.Id, cancellationToken))
             session.Revoke(now);
+
+        audit.Record(
+            AuditEventType.PasswordChanged,
+            actorUserId: user.Id,
+            targetUserId: user.Id);
 
         try { await unitOfWork.SaveChangesAsync(cancellationToken); }
         catch (ConcurrencyException) { return Result.Failure(ChangePasswordErrors.ConcurrencyConflict); }

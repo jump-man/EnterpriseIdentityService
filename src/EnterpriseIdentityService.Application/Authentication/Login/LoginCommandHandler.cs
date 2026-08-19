@@ -7,6 +7,8 @@ using EnterpriseIdentityService.Application.Authentication;
 using Microsoft.Extensions.Options;
 using EnterpriseIdentityService.Application.Abstractions.Authorization;
 using EnterpriseIdentityService.Application.Authorization;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Authentication.Login;
 
@@ -18,6 +20,7 @@ public sealed class LoginCommandHandler(
     IRefreshTokenGenerator refreshTokenGenerator,
     IRefreshTokenHasher refreshTokenHasher,
     IAuthorizationSnapshotProvider authorizationSnapshotProvider,
+    AuditRecorder audit,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider,
     IOptions<AuthenticationSessionOptions> sessionOptions)
@@ -55,6 +58,11 @@ public sealed class LoginCommandHandler(
             !passwordHasher.Verify(command.Password, user.PasswordHash) ||
             user.Status != UserStatus.Active)
         {
+            audit.Record(
+                AuditEventType.LoginFailed,
+                AuditOutcome.Failure,
+                AuditReasonCode.InvalidCredentials);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<LoginResult>.Failure(LoginErrors.InvalidCredentials);
         }
 
@@ -68,6 +76,16 @@ public sealed class LoginCommandHandler(
         AuthorizationSnapshot authorization =
             await authorizationSnapshotProvider.GetAsync(user, cancellationToken);
         AccessToken token = accessTokenProvider.Generate(user, session.Id, authorization);
+        audit.Record(
+            AuditEventType.LoginSucceeded,
+            actorUserId: user.Id,
+            targetUserId: user.Id,
+            sessionId: session.Id);
+        audit.Record(
+            AuditEventType.SessionCreated,
+            actorUserId: user.Id,
+            targetUserId: user.Id,
+            sessionId: session.Id);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<LoginResult>.Success(new LoginResult(token.Value, rawRefreshToken, token.ExpiresAtUtc));

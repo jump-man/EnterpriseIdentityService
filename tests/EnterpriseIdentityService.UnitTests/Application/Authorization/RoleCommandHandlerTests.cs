@@ -3,6 +3,7 @@ using EnterpriseIdentityService.Application.Authorization;
 using EnterpriseIdentityService.Application.Authorization.Roles;
 using EnterpriseIdentityService.Domain.Roles;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.UnitTests.TestDoubles;
 
 namespace EnterpriseIdentityService.UnitTests.Application.Authorization;
 
@@ -13,10 +14,10 @@ public sealed class RoleCommandHandlerTests
     {
         var roles = new FakeRoleRepository();
         var unitOfWork = new FakeUnitOfWork();
-        var handler = new CreateRoleCommandHandler(roles, unitOfWork);
+        var handler = new CreateRoleCommandHandler(roles, TestAudit.Create(), unitOfWork);
 
         var result = await handler.Handle(
-            new CreateRoleCommand(" Support "), CancellationToken.None);
+            new CreateRoleCommand(UserId.New(), " Support "), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Role role = Assert.Single(roles.Items);
@@ -32,10 +33,10 @@ public sealed class RoleCommandHandlerTests
         var roles = new FakeRoleRepository();
         roles.Items.Add(Role.Create(RoleId.New(), "Support"));
         var unitOfWork = new FakeUnitOfWork();
-        var handler = new CreateRoleCommandHandler(roles, unitOfWork);
+        var handler = new CreateRoleCommandHandler(roles, TestAudit.Create(), unitOfWork);
 
         var result = await handler.Handle(
-            new CreateRoleCommand(" support "), CancellationToken.None);
+            new CreateRoleCommand(UserId.New(), " support "), CancellationToken.None);
 
         Assert.Equal(AuthorizationErrors.RoleAlreadyExists, result.Error);
         Assert.Equal(0, unitOfWork.SaveCount);
@@ -47,7 +48,7 @@ public sealed class RoleCommandHandlerTests
         var roles = new FakeRoleRepository();
         var unitOfWork = new FakeUnitOfWork();
         var handler = new ReplaceRolePermissionsCommandHandler(
-            roles, null!, null!, unitOfWork);
+            roles, null!, null!, TestAudit.Create(), unitOfWork);
 
         var result = await handler.Handle(
             new ReplaceRolePermissionsCommand(

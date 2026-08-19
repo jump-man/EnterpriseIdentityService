@@ -5,12 +5,14 @@ using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
 using EnterpriseIdentityService.Application.Abstractions.Authorization;
 using EnterpriseIdentityService.Application.Authorization;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Authentication.Refresh;
 public sealed class RefreshCommandHandler(IUserSessionRepository sessions, IUserRepository users,
     IRefreshTokenHasher hasher, IRefreshTokenGenerator generator, IAccessTokenProvider accessTokens,
     IAuthorizationSnapshotProvider authorizationSnapshots, IUnitOfWork unitOfWork,
-    TimeProvider timeProvider) : ICommandHandler<RefreshCommand, AuthenticationTokensResult>
+    AuditRecorder audit, TimeProvider timeProvider) : ICommandHandler<RefreshCommand, AuthenticationTokensResult>
 {
     public async Task<Result<AuthenticationTokensResult>> Handle(RefreshCommand command, CancellationToken cancellationToken)
     {
@@ -25,6 +27,12 @@ public sealed class RefreshCommandHandler(IUserSessionRepository sessions, IUser
         if (token.IsConsumed)
         {
             session.Revoke(now);
+            audit.Record(
+                AuditEventType.RefreshTokenReplayDetected,
+                AuditOutcome.Detected,
+                AuditReasonCode.RefreshTokenReplay,
+                targetUserId: session.UserId,
+                sessionId: session.Id);
             try { await unitOfWork.SaveChangesAsync(cancellationToken); } catch (ConcurrencyException) { }
             return Result<AuthenticationTokensResult>.Failure(RefreshErrors.InvalidToken);
         }
@@ -37,6 +45,10 @@ public sealed class RefreshCommandHandler(IUserSessionRepository sessions, IUser
         sessions.Add(RefreshToken.Create(RefreshTokenId.New(), session.Id, hasher.Hash(raw), now));
         AuthorizationSnapshot authorization = await authorizationSnapshots.GetAsync(user, cancellationToken);
         AccessToken access = accessTokens.Generate(user, session.Id, authorization);
+        audit.Record(
+            AuditEventType.SessionRefreshed,
+            targetUserId: user.Id,
+            sessionId: session.Id);
         try { await unitOfWork.SaveChangesAsync(cancellationToken); }
         catch (ConcurrencyException) { return Result<AuthenticationTokensResult>.Failure(RefreshErrors.InvalidToken); }
         return Result<AuthenticationTokensResult>.Success(new(access.Value, raw, access.ExpiresAtUtc));

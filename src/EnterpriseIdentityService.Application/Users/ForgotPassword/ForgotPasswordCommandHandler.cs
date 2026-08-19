@@ -6,6 +6,8 @@ using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Application.PasswordRecovery;
 using EnterpriseIdentityService.Domain.Users;
 using Microsoft.Extensions.Options;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Users.ForgotPassword;
 
@@ -13,7 +15,7 @@ public sealed class ForgotPasswordCommandHandler(
     IUserRepository users, IPasswordResetTokenRepository tokens,
     IPasswordResetTokenGenerator generator, IPasswordResetTokenHasher hasher,
     IPasswordResetEmailFactory emailFactory, IEmailSender emailSender,
-    IUnitOfWork unitOfWork, TimeProvider timeProvider,
+    IUnitOfWork unitOfWork, AuditRecorder audit, TimeProvider timeProvider,
     IOptions<PasswordRecoveryOptions> options) : ICommandHandler<ForgotPasswordCommand>
 {
     public async Task<Result> Handle(ForgotPasswordCommand command, CancellationToken cancellationToken)
@@ -24,18 +26,29 @@ public sealed class ForgotPasswordCommandHandler(
         catch (ArgumentException) { return Result.Failure(ForgotPasswordErrors.InvalidEmail); }
 
         User? user = await users.GetByEmailAsync(email, cancellationToken);
-        if (user is null || user.Status is not UserStatus.Active and not UserStatus.Locked) return Result.Success();
+        if (user is null || user.Status is not UserStatus.Active and not UserStatus.Locked)
+        {
+            audit.Record(AuditEventType.PasswordResetRequested);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
 
         DateTimeOffset now = timeProvider.GetUtcNow();
         IReadOnlyList<PasswordResetToken> active = await tokens.GetActiveByUserIdAsync(user.Id, cancellationToken);
         if (active.OrderByDescending(x => x.CreatedAtUtc).FirstOrDefault() is { } newest &&
-            now - newest.CreatedAtUtc < options.Value.RequestCooldown) return Result.Success();
+            now - newest.CreatedAtUtc < options.Value.RequestCooldown)
+        {
+            audit.Record(AuditEventType.PasswordResetRequested, targetUserId: user.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
 
         foreach (PasswordResetToken token in active.Where(x => !x.IsConsumed && !x.IsRevoked)) token.Revoke(now);
         string rawToken = generator.Generate();
         var resetToken = PasswordResetToken.Create(PasswordResetTokenId.New(), user.Id, hasher.Hash(rawToken),
             now, now.Add(options.Value.TokenLifetime));
         tokens.Add(resetToken);
+        audit.Record(AuditEventType.PasswordResetRequested, targetUserId: user.Id);
         try { await unitOfWork.SaveChangesAsync(cancellationToken); }
         catch (ConcurrencyException) { return Result.Success(); }
 

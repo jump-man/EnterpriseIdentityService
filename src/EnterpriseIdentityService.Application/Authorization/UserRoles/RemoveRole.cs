@@ -4,6 +4,8 @@ using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Roles;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Authorization.UserRoles;
 
@@ -17,6 +19,7 @@ public sealed class RemoveRoleCommandHandler(
     IRoleRepository roles,
     IUserRoleRepository userRoles,
     IAuthorizationSnapshotProvider authorizationSnapshots,
+    AuditRecorder audit,
     IUnitOfWork unitOfWork)
     : ICommandHandler<RemoveRoleCommand>
 {
@@ -48,6 +51,14 @@ public sealed class RemoveRoleCommandHandler(
                 .All(permission => actorAuthorization.Permissions.Contains(
                     permission, StringComparer.Ordinal)))
         {
+            audit.Record(
+                AuditEventType.AuthorizationChangeRejected,
+                AuditOutcome.Failure,
+                AuditReasonCode.GrantCeilingViolation,
+                actorUserId: command.ActorUserId,
+                targetUserId: command.UserId,
+                roleId: role.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result.Failure(AuthorizationErrors.GrantCeilingExceeded);
         }
 
@@ -61,6 +72,14 @@ public sealed class RemoveRoleCommandHandler(
             target.Status == UserStatus.Active &&
             await roles.CountViableAdministratorsAsync(cancellationToken) <= 1)
         {
+            audit.Record(
+                AuditEventType.AuthorizationChangeRejected,
+                AuditOutcome.Failure,
+                AuditReasonCode.LastAdministratorProtection,
+                actorUserId: command.ActorUserId,
+                targetUserId: command.UserId,
+                roleId: role.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result.Failure(AuthorizationErrors.LastAdministratorRequired);
         }
 
@@ -70,6 +89,12 @@ public sealed class RemoveRoleCommandHandler(
         {
             role.RecordAssignmentChange();
         }
+
+        audit.Record(
+            AuditEventType.RoleRemovedFromUser,
+            actorUserId: command.ActorUserId,
+            targetUserId: command.UserId,
+            roleId: role.Id);
 
         try
         {

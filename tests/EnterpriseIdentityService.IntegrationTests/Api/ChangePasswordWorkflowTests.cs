@@ -9,6 +9,9 @@ using EnterpriseIdentityService.IntegrationTests.TestDoubles;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using EnterpriseIdentityService.Domain.Auditing;
+using EnterpriseIdentityService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace EnterpriseIdentityService.IntegrationTests.Api;
 
@@ -43,6 +46,13 @@ public sealed partial class ChangePasswordWorkflowTests(ApiWebApplicationFactory
             new LoginRequest("change@example.com", PasswordB))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/users/reset-password",
             new ResetPasswordRequest(resetToken, "Password-C!"))).StatusCode);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        AuditEntry passwordAudit = await context.Set<AuditEntry>().SingleAsync(
+            entry => entry.EventType == AuditEventType.PasswordChanged);
+        Assert.Equal(passwordAudit.ActorUserId, passwordAudit.TargetUserId);
+        Assert.Null(passwordAudit.Permission);
     }
 
     [Fact]

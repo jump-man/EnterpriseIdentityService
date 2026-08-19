@@ -14,13 +14,19 @@ public static class Permissions
         public const string Manage = "users.roles.manage";
     }
 
+    public static class Audit
+    {
+        public const string Read = "audit.read";
+    }
+
     public static IReadOnlyList<string> All { get; } = Array.AsReadOnly(
         new[]
         {
             Roles.Read,
             Roles.Manage,
             UserRoles.Read,
-            UserRoles.Manage
+            UserRoles.Manage,
+            Audit.Read
         });
 
     public static bool Contains(string permission) =>

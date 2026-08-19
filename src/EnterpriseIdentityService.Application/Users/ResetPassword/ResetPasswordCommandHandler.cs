@@ -3,13 +3,16 @@ using EnterpriseIdentityService.Application.Abstractions.Authentication;
 using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Users.ResetPassword;
 
 public sealed class ResetPasswordCommandHandler(
     IPasswordResetTokenRepository tokens, IUserRepository users,
     IPasswordResetTokenHasher tokenHasher, IPasswordHasher passwordHasher,
-    IUnitOfWork unitOfWork, IUserSessionRepository sessions, TimeProvider timeProvider) : ICommandHandler<ResetPasswordCommand>
+    IUnitOfWork unitOfWork, IUserSessionRepository sessions, AuditRecorder audit,
+    TimeProvider timeProvider) : ICommandHandler<ResetPasswordCommand>
 {
     public async Task<Result> Handle(ResetPasswordCommand command, CancellationToken cancellationToken)
     {
@@ -30,6 +33,9 @@ public sealed class ResetPasswordCommandHandler(
         foreach (PasswordResetToken other in await tokens.GetActiveByUserIdAsync(user.Id, cancellationToken))
             if (other.Id != token.Id && !other.IsConsumed && !other.IsRevoked) other.Revoke(now);
         foreach (UserSession session in await sessions.GetActiveByUserIdAsync(user.Id, cancellationToken)) session.Revoke(now);
+        audit.Record(
+            AuditEventType.PasswordResetCompleted,
+            targetUserId: user.Id);
         try { await unitOfWork.SaveChangesAsync(cancellationToken); }
         catch (ConcurrencyException) { return Result.Failure(ResetPasswordErrors.InvalidToken); }
         return Result.Success();

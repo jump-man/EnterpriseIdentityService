@@ -4,6 +4,8 @@ using EnterpriseIdentityService.Application.Abstractions.Messaging;
 using EnterpriseIdentityService.Application.Abstractions.Persistence;
 using EnterpriseIdentityService.Domain.Roles;
 using EnterpriseIdentityService.Domain.Users;
+using EnterpriseIdentityService.Application.Auditing;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.Application.Authorization.UserRoles;
 
@@ -17,6 +19,7 @@ public sealed class AssignRoleCommandHandler(
     IRoleRepository roles,
     IUserRoleRepository userRoles,
     IAuthorizationSnapshotProvider authorizationSnapshots,
+    AuditRecorder audit,
     IUnitOfWork unitOfWork)
     : ICommandHandler<AssignRoleCommand>
 {
@@ -53,6 +56,14 @@ public sealed class AssignRoleCommandHandler(
                 .All(permission => actorAuthorization.Permissions.Contains(
                     permission, StringComparer.Ordinal)))
         {
+            audit.Record(
+                AuditEventType.AuthorizationChangeRejected,
+                AuditOutcome.Failure,
+                AuditReasonCode.GrantCeilingViolation,
+                actorUserId: command.ActorUserId,
+                targetUserId: command.UserId,
+                roleId: role.Id);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
             return Result.Failure(AuthorizationErrors.GrantCeilingExceeded);
         }
 
@@ -67,6 +78,12 @@ public sealed class AssignRoleCommandHandler(
         {
             role.RecordAssignmentChange();
         }
+
+        audit.Record(
+            AuditEventType.RoleAssignedToUser,
+            actorUserId: command.ActorUserId,
+            targetUserId: command.UserId,
+            roleId: role.Id);
 
         try
         {

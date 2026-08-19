@@ -6,6 +6,8 @@ using EnterpriseIdentityService.Domain.Users;
 using Microsoft.Extensions.Options;
 using EnterpriseIdentityService.Application.Abstractions.Authorization;
 using EnterpriseIdentityService.Application.Authorization;
+using EnterpriseIdentityService.UnitTests.TestDoubles;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.UnitTests.Application.Authentication.Login;
 
@@ -20,7 +22,8 @@ public sealed class LoginCommandHandlerTests
         var repository = new FakeUserRepository(user);
         var passwordHasher = new FakePasswordHasher(true);
         var tokenProvider = new FakeAccessTokenProvider();
-        var handler = CreateHandler(repository, passwordHasher, tokenProvider);
+        var auditEntries = new FakeAuditEntryRepository();
+        var handler = CreateHandler(repository, passwordHasher, tokenProvider, auditEntries);
 
         var result = await handler.Handle(
             new LoginCommand(" USER@example.com ", Password),
@@ -33,18 +36,29 @@ public sealed class LoginCommandHandlerTests
         Assert.Equal(Password, passwordHasher.Password);
         Assert.Equal(user.PasswordHash, passwordHasher.PasswordHash);
         Assert.Same(user, Assert.Single(tokenProvider.Users));
+        Assert.Equal(
+            [AuditEventType.LoginSucceeded, AuditEventType.SessionCreated],
+            auditEntries.Entries.Select(entry => entry.EventType));
     }
 
     [Fact]
     public async Task Handle_ShouldReturnGenericError_WhenUserDoesNotExist()
     {
-        var fixture = new Fixture(null, true);
+        var repository = new FakeUserRepository(null);
+        var passwordHasher = new FakePasswordHasher(true);
+        var tokenProvider = new FakeAccessTokenProvider();
+        var auditEntries = new FakeAuditEntryRepository();
+        var handler = CreateHandler(repository, passwordHasher, tokenProvider, auditEntries);
 
-        var result = await fixture.Handler.Handle(ValidCommand(), CancellationToken.None);
+        var result = await handler.Handle(ValidCommand(), CancellationToken.None);
 
         Assert.Equal(LoginErrors.InvalidCredentials, result.Error);
-        Assert.Null(fixture.PasswordHasher.Password);
-        Assert.Empty(fixture.TokenProvider.Users);
+        Assert.Null(passwordHasher.Password);
+        Assert.Empty(tokenProvider.Users);
+        AuditEntry failed = Assert.Single(auditEntries.Entries);
+        Assert.Equal(AuditEventType.LoginFailed, failed.EventType);
+        Assert.Equal(AuditReasonCode.InvalidCredentials, failed.ReasonCode);
+        Assert.Null(failed.TargetUserId);
     }
 
     [Fact]
@@ -106,9 +120,10 @@ public sealed class LoginCommandHandlerTests
     private static LoginCommand ValidCommand() => new("user@example.com", Password);
 
     private static LoginCommandHandler CreateHandler(IUserRepository users, IPasswordHasher passwords,
-        IAccessTokenProvider accessTokens) => new(users, passwords, accessTokens, new FakeSessions(),
+        IAccessTokenProvider accessTokens, FakeAuditEntryRepository? auditEntries = null) =>
+        new(users, passwords, accessTokens, new FakeSessions(),
             new FakeRefreshGenerator(), new FakeRefreshHasher(), new FakeAuthorizationSnapshots(),
-            new FakeUnitOfWork(), TimeProvider.System,
+            TestAudit.Create(auditEntries), new FakeUnitOfWork(), TimeProvider.System,
             Options.Create(new AuthenticationSessionOptions { Lifetime = TimeSpan.FromDays(30) }));
 
     private static User ActiveUser()

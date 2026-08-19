@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using EnterpriseIdentityService.Domain.Auditing;
 
 namespace EnterpriseIdentityService.IntegrationTests.Api;
 
@@ -177,6 +178,17 @@ public sealed class AuthorizationWorkflowTests(ApiWebApplicationFactory factory)
         Assert.Equal(HttpStatusCode.Conflict,
             (await admin.DeleteAsync(
                 $"/api/users/{adminId}/roles/{BuiltInRoles.AdministratorId.Value}")).StatusCode);
+
+        await using AsyncServiceScope auditScope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext auditContext =
+            auditScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        AuditReasonCode?[] reasons = await auditContext.Set<AuditEntry>()
+            .Where(entry => entry.EventType == AuditEventType.AuthorizationChangeRejected)
+            .Select(entry => entry.ReasonCode)
+            .ToArrayAsync();
+        Assert.Contains(AuditReasonCode.GrantCeilingViolation, reasons);
+        Assert.Contains(AuditReasonCode.ProtectedSystemRole, reasons);
+        Assert.Contains(AuditReasonCode.LastAdministratorProtection, reasons);
     }
 
     private HttpClient CreateClient() => factory.CreateClient(
