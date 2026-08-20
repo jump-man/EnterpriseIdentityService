@@ -35,4 +35,40 @@ and should be covered by the deployment's privacy and retention policy. Automate
 retention/purge jobs, legal holds, external SIEM export, telemetry adapters, and an
 Outbox are future extensions; Phase 13 intentionally provides no audit deletion API.
 
+## Operational readiness
+
+- `GET /health/live` reports whether the API process can answer requests. It does
+  not access SQL Server or other external dependencies.
+- `GET /health/ready` checks whether the configured identity database is reachable
+  and returns `503 Service Unavailable` when that critical dependency is unavailable.
+
+Both endpoints are anonymous, exempt from client rate limits, and return only a
+minimal status document. They do not expose dependency names, connection details,
+exceptions, environment information, or stack traces.
+
+Production database migrations are an explicit deployment operation: apply the
+migrations first, deploy/start the API second, and allow traffic only after readiness
+becomes healthy. The API does not automatically migrate a production database at
+startup.
+
+## Correlation and operational logging
+
+Clients may send one `X-Correlation-ID` header using up to 64 ASCII letters, digits,
+periods, underscores, or hyphens. Missing, ambiguous, or invalid values are replaced
+with a server-generated identifier. The effective value is returned in the same
+response header, included in RFC 7807 Problem Details, placed in the structured
+logging scope, and reused by the security audit context.
+
+Request-completion logs contain only bounded method, normalized route template,
+status, duration, correlation ID, and trace ID metadata. Request and response bodies,
+raw query strings, authorization/cookie headers, passwords, access/refresh tokens,
+reset/verification tokens, signing keys, and connection strings are not logged.
+
+## OpenTelemetry foundation
+
+The API registers vendor-neutral OpenTelemetry instrumentation for inbound ASP.NET
+Core requests and .NET runtime metrics. No exporter, collector, Prometheus endpoint,
+or external observability backend is configured yet. Application logging continues
+through `ILogger<T>`, and security audit records remain a separate durable concern.
+
 > 🚧 Work in Progress

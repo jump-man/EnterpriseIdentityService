@@ -10,6 +10,9 @@
   <ItemGroup>
 	  <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
 	  <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+	  <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+	  <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+	  <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
 	  <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -22,6 +25,10 @@
     <ProjectReference Include="..\EnterpriseIdentityService.Application\EnterpriseIdentityService.Application.csproj" />
     <ProjectReference Include="..\EnterpriseIdentityService.Infrastructure\EnterpriseIdentityService.Infrastructure.csproj" />
     <ProjectReference Include="..\EnterpriseIdentityService.Contracts\EnterpriseIdentityService.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="EnterpriseIdentityService.IntegrationTests" />
   </ItemGroup>
 
 </Project>

@@ -17,9 +17,17 @@
 
 		<PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing"
 						Version="10.0.10" />
+		<PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore"
+						Version="10.0.10" />
 
 		<PackageVersion Include="Swashbuckle.AspNetCore"
 						Version="10.2.3" />
+		<PackageVersion Include="OpenTelemetry.Extensions.Hosting"
+						Version="1.17.0" />
+		<PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore"
+						Version="1.17.0" />
+		<PackageVersion Include="OpenTelemetry.Instrumentation.Runtime"
+						Version="1.17.0" />
 
 		<!-- Infrastructure -->
 		<PackageVersion Include="Microsoft.EntityFrameworkCore"

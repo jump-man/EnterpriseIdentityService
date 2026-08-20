@@ -20,6 +20,8 @@ using EnterpriseIdentityService.Api.Auditing;
 using EnterpriseIdentityService.Application.Abstractions.Auditing;
 using EnterpriseIdentityService.Application.Auditing;
 using EnterpriseIdentityService.Api.Endpoints.Auditing;
+using EnterpriseIdentityService.Api.Health;
+using EnterpriseIdentityService.Api.Observability;
 using EnterpriseIdentityService.Infrastructure;
 
 using Microsoft.OpenApi;
@@ -46,7 +48,7 @@ builder.Services.AddSwaggerGen(options =>
     });
     options.OperationFilter<AllowAnonymousOperationFilter>();
 });
-builder.Services.AddProblemDetails();
+builder.Services.AddOperationalObservability(builder.Environment);
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("verification-resend", httpContext =>
@@ -123,12 +125,9 @@ builder.Services.AddScoped<QueryAuditEntriesQueryHandler>();
 
 var app = builder.Build();
 
-app.UseExceptionHandler(new ExceptionHandlerOptions
-{
-    StatusCodeSelector = exception => exception is BadHttpRequestException
-        ? StatusCodes.Status400BadRequest
-        : StatusCodes.Status500InternalServerError
-});
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseExceptionHandler();
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -142,13 +141,7 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 
-app.MapGet(
-    "/health",
-    () => Results.Ok(new
-    {
-        Status = "Healthy",
-        Service = "EnterpriseIdentityService"
-    }));
+app.MapOperationalHealthEndpoints();
 
 app.MapRegisterUserEndpoint();
 app.MapLoginEndpoint();

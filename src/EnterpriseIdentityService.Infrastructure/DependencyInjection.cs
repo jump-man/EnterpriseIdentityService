@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Resend;
 
 namespace EnterpriseIdentityService.Infrastructure;
@@ -35,6 +36,11 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString));
+        services.AddHealthChecks()
+            .AddDbContextCheck<ApplicationDbContext>(
+                "database",
+                failureStatus: HealthStatus.Unhealthy,
+                tags: ["ready"]);
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
@@ -62,14 +68,15 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(JwtOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IAccessTokenProvider, JwtAccessTokenProvider>();
+        services.AddSingleton<IValidateOptions<AuthenticationSessionOptions>,
+            AuthenticationSessionOptionsValidator>();
         services.AddOptions<AuthenticationSessionOptions>()
             .Bind(configuration.GetSection(AuthenticationSessionOptions.SectionName))
-            .Validate(x => x.Lifetime > TimeSpan.Zero, "Session lifetime must be positive.")
             .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<PasswordRecoveryOptions>,
+            PasswordRecoveryOptionsValidator>();
         services.AddOptions<PasswordRecoveryOptions>()
             .Bind(configuration.GetSection(PasswordRecoveryOptions.SectionName))
-            .Validate(x => x.TokenLifetime > TimeSpan.Zero && x.RequestCooldown >= TimeSpan.Zero &&
-                Uri.TryCreate(x.PublicBaseUrl, UriKind.Absolute, out _), "Password recovery options are invalid.")
             .ValidateOnStart();
 
         services.AddSingleton<IValidateOptions<EmailVerificationOptions>, EmailVerificationOptionsValidator>();

@@ -31,6 +31,10 @@ public sealed class LayerDependencyTests
             "Microsoft.AspNetCore.Authentication.JwtBearer",
             "Microsoft.IdentityModel.Tokens",
             "System.IdentityModel.Tokens.Jwt",
+            "OpenTelemetry",
+            "OpenTelemetry.Api",
+            "OpenTelemetry.Extensions.Hosting",
+            "OpenTelemetry.Instrumentation.AspNetCore",
             "Resend"
         ];
 
@@ -52,6 +56,10 @@ public sealed class LayerDependencyTests
             "Microsoft.AspNetCore.Authentication.JwtBearer",
             "Microsoft.IdentityModel.Tokens",
             "System.IdentityModel.Tokens.Jwt",
+            "OpenTelemetry",
+            "OpenTelemetry.Api",
+            "OpenTelemetry.Extensions.Hosting",
+            "OpenTelemetry.Instrumentation.AspNetCore",
             "Resend"
         ];
 
