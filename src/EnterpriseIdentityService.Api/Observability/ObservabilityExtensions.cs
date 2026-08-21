@@ -1,5 +1,8 @@
 using System.Reflection;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
+using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -10,6 +13,7 @@ internal static class ObservabilityExtensions
 {
     public static IServiceCollection AddOperationalObservability(
         this IServiceCollection services,
+        IConfiguration configuration,
         IHostEnvironment environment)
     {
         services.AddProblemDetails(options =>
@@ -33,7 +37,7 @@ internal static class ObservabilityExtensions
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion;
 
-        services.AddOpenTelemetry()
+        OpenTelemetryBuilder openTelemetry = services.AddOpenTelemetry()
             .ConfigureResource(resource => resource
                 .AddService(serviceName, serviceVersion: serviceVersion)
                 .AddAttributes([
@@ -45,6 +49,12 @@ internal static class ObservabilityExtensions
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
                 .AddRuntimeInstrumentation());
+
+        if (!string.IsNullOrWhiteSpace(
+            configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+        {
+            openTelemetry.UseAzureMonitor();
+        }
 
         return services;
     }

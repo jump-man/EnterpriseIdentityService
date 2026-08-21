@@ -5,6 +5,8 @@
 .idea
 .vscode
 .config
+!.config/
+!.config/dotnet-tools.json
 
 **/bin
 **/obj

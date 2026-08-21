@@ -7,6 +7,8 @@
 
 	<ItemGroup>
 		<!-- API -->
+		<PackageVersion Include="Azure.Monitor.OpenTelemetry.AspNetCore"
+						Version="1.6.0" />
 		<PackageVersion Include="Microsoft.AspNetCore.OpenApi"
 						Version="10.0.10" />
 		<PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer"

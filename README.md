@@ -67,8 +67,10 @@ reset/verification tokens, signing keys, and connection strings are not logged.
 ## OpenTelemetry foundation
 
 The API registers vendor-neutral OpenTelemetry instrumentation for inbound ASP.NET
-Core requests and .NET runtime metrics. No exporter, collector, Prometheus endpoint,
-or external observability backend is configured yet. Application logging continues
+Core requests and .NET runtime metrics. When
+`APPLICATIONINSIGHTS_CONNECTION_STRING` is supplied, the API enables the Azure
+Monitor OpenTelemetry distribution and exports telemetry to Application Insights.
+Local development remains exporter-free by default. Application logging continues
 through `ILogger<T>`, and security audit records remain a separate durable concern.
 
 ## Docker and local containers
@@ -169,10 +171,20 @@ Data Protection. JWT signing configuration must be identical across replicas.
 Current fixed-window rate limits are process-local, so a future multi-replica
 deployment will need a deliberate distributed rate-limit strategy.
 
-This phase is cloud-neutral: it adds no Azure SDKs, managed identities, registry
-assumptions, CI/CD workflow, telemetry exporter, or automatic migration job. A later
-deployment phase can build and scan immutable images, push them to a registry,
-inject production secrets, run migrations as a controlled deployment step, and
-configure Azure hosting without changing Domain or Application code.
+## Azure deployment and CI/CD
+
+Production is designed for Azure Container Apps, Azure Container Registry, Azure
+SQL Database, Key Vault, Log Analytics, and Application Insights. Bicep provisions
+the Azure resources, while GitHub Actions validates source and an immutable image,
+runs dependency and image security gates, creates an SBOM, pushes the exact validated
+artifact to ACR, executes a single EF migration job, and promotes a healthy revision.
+
+The runtime remains cloud-neutral below the API composition root: Domain and
+Application contain no Azure references, existing ASP.NET Core configuration keys
+are supplied as environment variables, and local Compose continues to use its SQL
+Server container. Production uses managed identity for ACR, Key Vault, and Azure SQL
+access. See [Azure deployment](docs/azure-deployment.md) for provisioning, OIDC,
+configuration, migration, deployment, rollback, security, networking, observability,
+cost, and future-hardening guidance.
 
 > 🚧 Work in Progress

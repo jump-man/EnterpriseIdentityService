@@ -48,7 +48,7 @@ builder.Services.AddSwaggerGen(options =>
     });
     options.OperationFilter<AllowAnonymousOperationFilter>();
 });
-builder.Services.AddOperationalObservability(builder.Environment);
+builder.Services.AddOperationalObservability(builder.Configuration, builder.Environment);
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("verification-resend", httpContext =>

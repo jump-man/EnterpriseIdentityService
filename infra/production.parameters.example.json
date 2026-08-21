@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourcePrefix": {
+      "value": "replace-me"
+    },
+    "environmentName": {
+      "value": "prod"
+    },
+    "sqlDatabaseSkuName": {
+      "value": "GP_S_Gen5_1"
+    },
+    "sqlDatabaseSkuTier": {
+      "value": "GeneralPurpose"
+    },
+    "sqlDatabaseCapacity": {
+      "value": 1
+    },
+    "sqlDatabaseMinCapacity": {
+      "value": 1
+    },
+    "sqlDatabaseAutoPauseDelay": {
+      "value": 60
+    },
+    "logRetentionInDays": {
+      "value": 30
+    },
+    "resendEnabled": {
+      "value": false
+    }
+  }
+}

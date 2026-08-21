@@ -1,0 +1,414 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful CI run ID containing the production image artifact
+        required: true
+        type: string
+      git_sha:
+        description: Full Git SHA validated by that CI run
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Migrate and promote immutable revision
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      SOURCE_RUN_ID: ${{ github.event.workflow_run.id || inputs.ci_run_id }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || inputs.git_sha }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      RESOURCE_PREFIX: ${{ vars.AZURE_RESOURCE_PREFIX }}
+      JWT_SIGNING_KEY_SECRET_VERSION: ${{ vars.JWT_SIGNING_KEY_SECRET_VERSION }}
+      ENVIRONMENT_NAME: prod
+      IMAGE_REPOSITORY: enterprise-identity-service
+
+    steps:
+      - name: Verify source CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          test "$(jq -r .conclusion <<< "$run_json")" = "success"
+          test "$(jq -r .head_sha <<< "$run_json")" = "$SOURCE_SHA"
+          test "$(jq -r .head_branch <<< "$run_json")" = "main"
+          test "${#SOURCE_SHA}" -eq 40
+
+      - name: Check out validated deployment source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+
+      - name: Download validated image and SBOM
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: production-image-${{ env.SOURCE_SHA }}
+          path: artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+
+      - name: Verify and load artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts
+          sha256sum --check image.tar.sha256
+          grep -Fx "git_sha=$SOURCE_SHA" image-metadata.txt
+          test -s sbom.spdx.json
+          docker load --input image.tar
+          test "$(docker image inspect "$IMAGE_REPOSITORY:$SOURCE_SHA" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+
+      - name: Authenticate to Azure with OIDC
+        uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve deterministic resource names
+        shell: bash
+        run: |
+          set -euo pipefail
+          stem="${RESOURCE_PREFIX,,}-$ENVIRONMENT_NAME"
+          compact_stem="${stem//-/}"
+          {
+            echo "REGISTRY_NAME=${compact_stem}acr"
+            echo "CONTAINER_APP=${stem}-api"
+            echo "MIGRATION_JOB=${stem}-migrate"
+            echo "KEY_VAULT=${stem}-kv"
+            echo "RUNTIME_IDENTITY=${stem}-api-mi"
+          } >> "$GITHUB_ENV"
+
+      - name: Push the validated image to ACR
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          login_server="$(az acr show --name "$REGISTRY_NAME" --resource-group "$RESOURCE_GROUP" --query loginServer --output tsv)"
+          az acr login --name "$REGISTRY_NAME"
+          tagged_image="$login_server/$IMAGE_REPOSITORY:$SOURCE_SHA"
+          docker tag "$IMAGE_REPOSITORY:$SOURCE_SHA" "$tagged_image"
+          docker push "$tagged_image"
+          digest="$(az acr repository show --name "$REGISTRY_NAME" --image "$IMAGE_REPOSITORY:$SOURCE_SHA" --query digest --output tsv)"
+          test -n "$digest"
+          immutable_image="$login_server/$IMAGE_REPOSITORY@$digest"
+          echo "immutable_image=$immutable_image" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Provision migration job on first deployment
+        shell: bash
+        env:
+          IMMUTABLE_IMAGE: ${{ steps.image.outputs.immutable_image }}
+          PUBLIC_BASE_URL: ${{ vars.PRODUCTION_PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$PUBLIC_BASE_URL"
+          [[ "$JWT_SIGNING_KEY_SECRET_VERSION" =~ ^[0-9a-fA-F]{32}$ ]]
+
+          if az containerapp job show \
+            --name "$MIGRATION_JOB" \
+            --resource-group "$RESOURCE_GROUP" \
+            --output none 2> /dev/null; then
+            exit 0
+          fi
+
+          az deployment group create \
+            --name "workload-${SOURCE_SHA:0:12}-migration" \
+            --resource-group "$RESOURCE_GROUP" \
+            --template-file infra/workload.bicep \
+            --parameters \
+              resourcePrefix="$RESOURCE_PREFIX" \
+              environmentName="$ENVIRONMENT_NAME" \
+              containerImage="$IMMUTABLE_IMAGE" \
+              gitSha="$SOURCE_SHA" \
+              revisionSuffix="${SOURCE_SHA:0:12}" \
+              publicBaseUrl="$PUBLIC_BASE_URL" \
+              jwtSigningKeySecretVersion="$JWT_SIGNING_KEY_SECRET_VERSION" \
+              deployApplication=false \
+            --output none
+
+      - name: Run the explicit EF Core migration job
+        shell: bash
+        env:
+          IMMUTABLE_IMAGE: ${{ steps.image.outputs.immutable_image }}
+        run: |
+          set -euo pipefail
+          az containerapp job update \
+            --name "$MIGRATION_JOB" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$IMMUTABLE_IMAGE" \
+            --output none
+
+          execution_name="$(az containerapp job start \
+            --name "$MIGRATION_JOB" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query name --output tsv)"
+          test -n "$execution_name"
+
+          for attempt in {1..90}; do
+            status="$(az containerapp job execution show \
+              --name "$MIGRATION_JOB" \
+              --resource-group "$RESOURCE_GROUP" \
+              --job-execution-name "$execution_name" \
+              --query properties.status --output tsv)"
+            case "$status" in
+              Succeeded)
+                exit 0
+                ;;
+              Failed|Stopped|Degraded)
+                echo "Migration execution $execution_name ended with $status." >&2
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+
+          echo "Migration execution $execution_name did not complete before the timeout." >&2
+          exit 1
+
+      - name: Create and verify candidate revision
+        id: revision
+        shell: bash
+        env:
+          IMMUTABLE_IMAGE: ${{ steps.image.outputs.immutable_image }}
+          PUBLIC_BASE_URL: ${{ vars.PRODUCTION_PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          suffix="${SOURCE_SHA:0:12}"
+          previous_revision=""
+
+          if ! az containerapp show \
+            --name "$CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --output none 2> /dev/null; then
+            az deployment group create \
+              --name "workload-${suffix}" \
+              --resource-group "$RESOURCE_GROUP" \
+              --template-file infra/workload.bicep \
+              --parameters \
+                resourcePrefix="$RESOURCE_PREFIX" \
+                environmentName="$ENVIRONMENT_NAME" \
+                containerImage="$IMMUTABLE_IMAGE" \
+                gitSha="$SOURCE_SHA" \
+                revisionSuffix="$suffix" \
+                publicBaseUrl="$PUBLIC_BASE_URL" \
+                jwtSigningKeySecretVersion="$JWT_SIGNING_KEY_SECRET_VERSION" \
+                deployApplication=true \
+              --output none
+            new_revision="$(az containerapp show \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query properties.latestRevisionName --output tsv)"
+          else
+            mapfile -t production_revisions < <(
+              az containerapp revision list \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "[?properties.trafficWeight == \`100\`].name" \
+              --output tsv
+            )
+            if [[ "${#production_revisions[@]}" -ne 1 ]]; then
+              echo "Expected exactly one production revision with 100% traffic." >&2
+              exit 1
+            fi
+            previous_revision="${production_revisions[0]}"
+
+            # Pin traffic to the named production revision before the revision-scoped
+            # update. A latestRevision rule would promote the candidate as soon as
+            # Azure marks it ready, before the explicit revision-FQDN verification.
+            az containerapp ingress traffic set \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision-weight "$previous_revision=100" \
+              --output none
+
+            latest_rule_weight="$(az containerapp show \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "properties.configuration.ingress.traffic[?latestRevision == \`true\`].weight | [0]" \
+              --output tsv)"
+            pinned_production_weight="$(az containerapp show \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "properties.configuration.ingress.traffic[?revisionName == '$previous_revision'].weight | [0]" \
+              --output tsv)"
+            test -z "$latest_rule_weight"
+            test "$pinned_production_weight" = "100"
+
+            key_vault_uri="$(az keyvault show \
+              --name "$KEY_VAULT" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query properties.vaultUri --output tsv)"
+            runtime_identity_id="$(az identity show \
+              --name "$RUNTIME_IDENTITY" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query id --output tsv)"
+            jwt_secret_uri="${key_vault_uri}secrets/jwt-signing-key/${JWT_SIGNING_KEY_SECRET_VERSION}"
+            az containerapp secret set \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --secrets "jwt-signing-key=keyvaultref:${jwt_secret_uri},identityref:${runtime_identity_id}" \
+              --output none
+
+            configured_jwt_secret_uri="$(az containerapp show \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "properties.configuration.secrets[?name == 'jwt-signing-key'].keyVaultUrl | [0]" \
+              --output tsv)"
+            test "$configured_jwt_secret_uri" = "$jwt_secret_uri"
+
+            new_revision="$(az containerapp update \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --image "$IMMUTABLE_IMAGE" \
+              --revision-suffix "$suffix" \
+              --query properties.latestRevisionName --output tsv)"
+
+            latest_rule_weight="$(az containerapp show \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "properties.configuration.ingress.traffic[?latestRevision == \`true\`].weight | [0]" \
+              --output tsv)"
+            previous_weight="$(az containerapp revision list \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "[?name == '$previous_revision'].properties.trafficWeight | [0]" \
+              --output tsv)"
+            candidate_weight="$(az containerapp revision list \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query "[?name == '$new_revision'].properties.trafficWeight | [0]" \
+              --output tsv)"
+            test -z "$latest_rule_weight"
+            test "$previous_weight" = "100"
+            test "${candidate_weight:-0}" = "0"
+          fi
+          test -n "$new_revision"
+
+          revision_fqdn="$(az containerapp revision show \
+            --name "$CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --revision "$new_revision" \
+            --query properties.fqdn --output tsv)"
+          test -n "$revision_fqdn"
+
+          healthy=false
+          for attempt in {1..60}; do
+            health_state="$(az containerapp revision show \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision "$new_revision" \
+              --query properties.healthState --output tsv)"
+            if [[ "$health_state" == "Healthy" ]] && \
+              curl --fail --silent --show-error "https://$revision_fqdn/health/ready" > /dev/null; then
+              healthy=true
+              break
+            fi
+            sleep 10
+          done
+
+          if [[ "$healthy" != "true" ]]; then
+            az containerapp revision deactivate \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision "$new_revision" \
+              --output none || true
+            echo "Candidate revision $new_revision did not become ready." >&2
+            exit 1
+          fi
+
+          echo "previous_revision=$previous_revision" >> "$GITHUB_OUTPUT"
+          echo "new_revision=$new_revision" >> "$GITHUB_OUTPUT"
+
+      - name: Promote candidate and verify production readiness
+        shell: bash
+        env:
+          NEW_REVISION: ${{ steps.revision.outputs.new_revision }}
+          PREVIOUS_REVISION: ${{ steps.revision.outputs.previous_revision }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$PREVIOUS_REVISION" && "$PREVIOUS_REVISION" != "$NEW_REVISION" ]]; then
+            az containerapp ingress traffic set \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision-weight "$PREVIOUS_REVISION=0" "$NEW_REVISION=100" \
+              --output none
+          else
+            az containerapp ingress traffic set \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision-weight "$NEW_REVISION=100" \
+              --output none
+          fi
+
+          production_fqdn="$(az containerapp show \
+            --name "$CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn --output tsv)"
+
+          if ! curl --fail --silent --show-error --retry 12 --retry-delay 5 \
+            "https://$production_fqdn/health/ready" > /dev/null; then
+            if [[ -n "$PREVIOUS_REVISION" && "$PREVIOUS_REVISION" != "$NEW_REVISION" ]]; then
+              az containerapp revision activate \
+                --name "$CONTAINER_APP" \
+                --resource-group "$RESOURCE_GROUP" \
+                --revision "$PREVIOUS_REVISION" \
+                --output none
+              az containerapp ingress traffic set \
+                --name "$CONTAINER_APP" \
+                --resource-group "$RESOURCE_GROUP" \
+                --revision-weight "$PREVIOUS_REVISION=100" "$NEW_REVISION=0" \
+                --output none
+            fi
+            az containerapp revision deactivate \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision "$NEW_REVISION" \
+              --output none || true
+            exit 1
+          fi
+
+          if [[ -n "$PREVIOUS_REVISION" && "$PREVIOUS_REVISION" != "$NEW_REVISION" ]]; then
+            az containerapp revision deactivate \
+              --name "$CONTAINER_APP" \
+              --resource-group "$RESOURCE_GROUP" \
+              --revision "$PREVIOUS_REVISION" \
+              --output none
+          fi
+
+          {
+            echo "### Production deployment"
+            echo "- Git SHA: \`$SOURCE_SHA\`"
+            echo "- Image digest: \`${{ steps.image.outputs.digest }}\`"
+            echo "- Container Apps revision: \`$NEW_REVISION\`"
+            echo "- Endpoint: \`https://$production_fqdn\`"
+          } >> "$GITHUB_STEP_SUMMARY"
