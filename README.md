@@ -71,4 +71,108 @@ Core requests and .NET runtime metrics. No exporter, collector, Prometheus endpo
 or external observability backend is configured yet. Application logging continues
 through `ILogger<T>`, and security audit records remain a separate durable concern.
 
+## Docker and local containers
+
+The repository includes a production-oriented Linux image for the API and a small,
+cloud-neutral Compose topology for local development. The API image is built with
+the .NET 10 SDK and runs on the ASP.NET Core runtime as the image's non-root `app`
+user. SQL Server is reachable from the API through Compose service DNS as `sql`; it
+stores its database files in the named `sql-data` volume.
+
+Install Docker with Compose v2 and the .NET 10 SDK. From the repository root, create
+the local environment file and replace **both** `replace-me` database values with
+the same strong SQL Server password. Replace `JWT_SIGNING_KEY` with an independent,
+random value of at least 32 characters:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env` contains credentials and must never be committed, copied into an image, or
+used as the production secret store. `.gitignore` and `.dockerignore` exclude it;
+production platforms should inject equivalent environment variables from their
+secret-management facility.
+
+Build the API image directly with:
+
+```powershell
+docker build --pull --tag enterprise-identity-service:local .
+```
+
+For a new database, start SQL Server first and wait for it to become healthy:
+
+```powershell
+docker compose up -d sql
+docker compose ps
+```
+
+Database migrations are an explicit operation and are never run by API startup.
+Configure a host-side connection using the same password as `SQL_SA_PASSWORD` in
+`.env`, restore the repository-local EF tool, and apply the migrations before
+starting the API:
+
+```powershell
+$env:ConnectionStrings__Database = 'Server=localhost,1433;Database=EnterpriseIdentityService;User ID=sa;Password=replace-with-the-value-from-.env;Encrypt=True;TrustServerCertificate=True'
+dotnet tool restore
+dotnet ef database update --project src/EnterpriseIdentityService.Infrastructure --startup-project src/EnterpriseIdentityService.Api
+Remove-Item Env:ConnectionStrings__Database
+```
+
+If `SQL_HOST_PORT` is changed, use that host port in the migration connection
+string. SQL Server is available to local tools at `localhost,SQL_HOST_PORT` as
+`sa`. The API connection string must continue to use the container endpoint
+`sql,1433`, never `localhost`.
+
+Start or rebuild the complete topology after migrations:
+
+```powershell
+docker compose up --build -d
+docker compose up --build -d api  # rebuild only the API after source changes
+```
+
+With the example ports, the API and health endpoints are:
+
+- API: `http://localhost:8080`
+- Liveness: `http://localhost:8080/health/live`
+- Readiness: `http://localhost:8080/health/ready`
+
+The container intentionally serves HTTP on port `8080`. TLS terminates at the
+deployment ingress, reverse proxy, or cloud edge; no development certificate is
+baked into the image. Password-recovery and email-verification public base URLs
+remain HTTPS-only under existing startup validation and should identify that
+external TLS endpoint. The example values are inert local placeholders while email
+delivery is disabled.
+
+Use stdout/stderr logs and stop the topology with:
+
+```powershell
+docker compose logs --follow api
+docker compose down
+```
+
+`docker compose down` preserves the `sql-data` volume, so users, roles, sessions,
+refresh tokens, and audit records survive container recreation. To intentionally
+erase the local database, run `docker compose down --volumes`; this is destructive
+and cannot be undone unless the database was backed up.
+
+The API image deliberately has no added HTTP client solely for a Dockerfile
+`HEALTHCHECK`. Compose checks SQL readiness with the image's bundled `sqlcmd`, while
+deployment platforms should probe `/health/live` for process liveness and
+`/health/ready` for database-backed readiness. A transient database outage makes
+readiness fail without redefining process liveness. Compose also leaves restart and
+resource policies to the deployment environment.
+
+The API filesystem is stateless and has no application log volume. Durable identity
+and audit state lives in SQL Server. No data-protection-key volume is added because
+the current authentication/session implementation does not depend on ASP.NET Core
+Data Protection. JWT signing configuration must be identical across replicas.
+Current fixed-window rate limits are process-local, so a future multi-replica
+deployment will need a deliberate distributed rate-limit strategy.
+
+This phase is cloud-neutral: it adds no Azure SDKs, managed identities, registry
+assumptions, CI/CD workflow, telemetry exporter, or automatic migration job. A later
+deployment phase can build and scan immutable images, push them to a registry,
+inject production secrets, run migrations as a controlled deployment step, and
+configure Azure hosting without changing Domain or Application code.
+
 > 🚧 Work in Progress
