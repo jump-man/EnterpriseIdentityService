@@ -33,7 +33,7 @@ RUN dotnet ef migrations bundle \
     --target-runtime linux-x64 \
     --output /app/migrations/efbundle
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.10-noble AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.11-noble AS final
 
 ARG SOURCE_REVISION=unknown
 
