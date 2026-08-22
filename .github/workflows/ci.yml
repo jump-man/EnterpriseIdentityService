@@ -182,7 +182,7 @@ jobs:
         run: |
           mkdir -p artifacts
           docker save --output artifacts/image.tar "$IMAGE_NAME:$GITHUB_SHA"
-          sha256sum artifacts/image.tar > artifacts/image.tar.sha256
+          (cd artifacts && sha256sum image.tar > image.tar.sha256)
           {
             echo "git_sha=$GITHUB_SHA"
             echo "image_id=$(docker image inspect "$IMAGE_NAME:$GITHUB_SHA" --format '{{.Id}}')"
