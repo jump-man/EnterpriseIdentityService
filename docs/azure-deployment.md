@@ -254,8 +254,9 @@ commit SHAs.
 
 ## Production deployment flow
 
-The deployment workflow runs only after successful main-branch CI or an explicit
-manual selection of a successful CI run and matching full SHA. It:
+Production deployment is manual-only. An operator starts the workflow with
+`workflow_dispatch` and supplies the ID of a successful main-branch CI run and its
+matching full Git SHA. The workflow then:
 
 1. verifies the CI run, SHA, archive checksum, SBOM, and image source label;
 2. authenticates to Azure through OIDC;

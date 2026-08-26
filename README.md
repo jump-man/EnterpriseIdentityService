@@ -23,6 +23,23 @@ Enterprise Identity Service is a production-oriented Identity and Access Managem
 
 The solution follows Clean Architecture with dependencies pointing inward:
 
+```mermaid
+flowchart LR
+    Clients["External HTTP clients"]
+    Api["API<br/>ASP.NET Core Minimal APIs<br/>JWT access-token authentication and authorization-version checks<br/>permission policies<br/>correlation IDs, RFC 7807, OpenTelemetry, liveness and readiness"]
+    Application["Application<br/>use cases and abstractions<br/>accounts, refresh rotation and replay detection<br/>roles, permissions, authorization invalidation, audit recording"]
+    Domain["Domain<br/>users, sessions, roles and permissions<br/>business invariants and audit entries"]
+    Infrastructure["Infrastructure<br/>EF Core repositories<br/>JWT, token, password-hashing and email services"]
+    Sql[("SQL Server<br/>identity, sessions and audit trail")]
+
+    Clients --> Api
+    Api --> Application
+    Application --> Domain
+    Api -.->|composition root| Infrastructure
+    Infrastructure -.->|implements abstractions| Application
+    Infrastructure --> Sql
+```
+
 - **Domain** contains persistence-ignorant entities, value objects, domain events, and business invariants. It has no dependency on the other solution layers.
 - **Application** contains use cases and abstractions for authentication, authorization, persistence, email, and auditing. Among solution projects, Application depends only on Domain.
 - **Infrastructure** implements Application abstractions with Entity Framework Core, SQL Server, token services, password hashing, and email delivery.
@@ -197,6 +214,56 @@ docker compose down
 ## Azure Deployment Architecture & CI/CD
 
 The Azure deployment architecture uses Container Apps, Container Registry, Azure SQL Database, Key Vault, Log Analytics, and Application Insights. Separate managed identities give the runtime and migration job only their required access to ACR, Key Vault, and Azure SQL.
+
+CI and production deployment are separate workflows. CI produces the validated artifact; production deployment requires an explicit manual selection of its successful CI run and matching Git SHA.
+
+```mermaid
+flowchart TB
+    Source["Pull request or push"]
+
+    subgraph GitHub["GitHub Actions"]
+        CI["CI<br/>restore, build and automated tests<br/>NuGet vulnerability and Bicep checks"]
+        SupplyChain["Container contract and Trivy scan<br/>SPDX SBOM generation"]
+        Artifact["Validated immutable artifact<br/>image, checksum, metadata and SBOM"]
+        Manual["Manual Deploy Production<br/>verify CI run, Git SHA and artifact"]
+        OIDC["GitHub Actions OIDC<br/>Azure login without a client secret"]
+
+        CI --> SupplyChain
+        SupplyChain -->|main push| Artifact
+        Artifact -->|workflow_dispatch| Manual
+        Manual --> OIDC
+    end
+
+    subgraph Azure["Target Azure architecture - not currently provisioned"]
+        ACR["Azure Container Registry<br/>image addressed by digest"]
+        Migration["Container Apps migration job<br/>EF Core migration bundle<br/>failure stops deployment"]
+        Sql[("Azure SQL Database")]
+        Candidate["Candidate Container Apps revision"]
+        KeyVault["Key Vault<br/>versioned JWT signing key"]
+        CandidateReady{"Candidate ready?<br/>Azure health and /health/ready"}
+        Promote["Promote candidate to 100% traffic"]
+        ProductionReady{"Production /health/ready?"}
+        Complete["Deactivate previous revision<br/>when present"]
+        CandidateFailure["Deactivate candidate<br/>deployment fails"]
+        Rollback["Restore previous traffic when available<br/>deactivate candidate"]
+
+        ACR -->|migration identity pull| Migration
+        Migration -.->|migration identity| Sql
+        Migration -->|success| Candidate
+        ACR -->|runtime identity pull| Candidate
+        Candidate -.->|runtime identity| Sql
+        Candidate -.->|runtime identity| KeyVault
+        Candidate --> CandidateReady
+        CandidateReady -->|yes| Promote
+        CandidateReady -->|no| CandidateFailure
+        Promote --> ProductionReady
+        ProductionReady -->|yes| Complete
+        ProductionReady -->|no| Rollback
+    end
+
+    Source --> CI
+    OIDC --> ACR
+```
 
 The pipeline is designed to promote the same immutable container artifact validated by CI. It pushes that artifact to ACR, runs its EF Core migration bundle before application deployment, creates and verifies a candidate Container Apps revision, then promotes traffic. If post-promotion readiness fails, the workflow restores traffic to the previous revision. The API itself does not run production migrations at startup.
 
