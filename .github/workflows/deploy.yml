@@ -1,13 +1,6 @@
 name: Deploy Production
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    branches:
-      - main
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       ci_run_id:
@@ -28,9 +21,6 @@ concurrency:
 jobs:
   deploy:
     name: Migrate and promote immutable revision
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: production
@@ -39,8 +29,8 @@ jobs:
       contents: read
       id-token: write
     env:
-      SOURCE_RUN_ID: ${{ github.event.workflow_run.id || inputs.ci_run_id }}
-      SOURCE_SHA: ${{ github.event.workflow_run.head_sha || inputs.git_sha }}
+      SOURCE_RUN_ID: ${{ inputs.ci_run_id }}
+      SOURCE_SHA: ${{ inputs.git_sha }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
