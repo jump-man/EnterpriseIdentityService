@@ -1,6 +1,6 @@
 # Azure deployment
 
-Phase 16 provides a reproducible production path without changing the Domain or
+The deployment architecture provides a reproducible production path without changing the Domain or
 Application projects. Azure remains a deployment concern; the API still consumes
 ordinary ASP.NET Core configuration and the Infrastructure project still configures
 EF Core from `ConnectionStrings:Database`.

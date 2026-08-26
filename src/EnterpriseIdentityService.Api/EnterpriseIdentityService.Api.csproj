@@ -9,7 +9,6 @@
 
   <ItemGroup>
 	  <PackageReference Include="Azure.Monitor.OpenTelemetry.AspNetCore" />
-	  <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
 	  <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
 	  <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
 	  <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
@@ -25,7 +24,6 @@
   <ItemGroup>
     <ProjectReference Include="..\EnterpriseIdentityService.Application\EnterpriseIdentityService.Application.csproj" />
     <ProjectReference Include="..\EnterpriseIdentityService.Infrastructure\EnterpriseIdentityService.Infrastructure.csproj" />
-    <ProjectReference Include="..\EnterpriseIdentityService.Contracts\EnterpriseIdentityService.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

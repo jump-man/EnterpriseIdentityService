@@ -11,7 +11,6 @@ RUN dotnet tool restore
 
 COPY src/EnterpriseIdentityService.Api/EnterpriseIdentityService.Api.csproj src/EnterpriseIdentityService.Api/
 COPY src/EnterpriseIdentityService.Application/EnterpriseIdentityService.Application.csproj src/EnterpriseIdentityService.Application/
-COPY src/EnterpriseIdentityService.Contracts/EnterpriseIdentityService.Contracts.csproj src/EnterpriseIdentityService.Contracts/
 COPY src/EnterpriseIdentityService.Domain/EnterpriseIdentityService.Domain.csproj src/EnterpriseIdentityService.Domain/
 COPY src/EnterpriseIdentityService.Infrastructure/EnterpriseIdentityService.Infrastructure.csproj src/EnterpriseIdentityService.Infrastructure/
 

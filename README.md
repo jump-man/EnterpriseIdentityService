@@ -1,117 +1,162 @@
 # Enterprise Identity Service
 
-Production-oriented Identity and Access Management service built with ASP.NET Core.
+Enterprise Identity Service is a production-oriented Identity and Access Management API built with .NET 10 and ASP.NET Core. It applies Clean Architecture to authentication, permission-based authorization, security controls, observability, and deployment concerns while keeping the domain model independent of frameworks and persistence.
 
-## Authentication
+## Key Features
 
-- `POST /api/auth/register` creates a user.
-- `POST /api/auth/login` authenticates an active user and returns a short-lived JWT access token.
-- `GET /api/users/me` requires `Authorization: Bearer <access-token>` and returns the authenticated user.
+- User registration, email verification, and account activation
+- JWT authentication and authenticated password changes
+- Password recovery and reset
+- Refresh-token rotation with replay detection
+- Per-session logout and logout-all
+- Roles, permissions, and administrative authorization APIs
+- Authorization-version invalidation for issued access tokens
+- Append-only security audit trail
+- Liveness and database-backed readiness endpoints
+- Correlation IDs and structured request logging
+- OpenTelemetry instrumentation with optional Azure Monitor export
+- Docker and Docker Compose support
+- CI builds, tests, security checks, and SBOM generation
+- Bicep-based Azure deployment architecture
 
-JWT settings are read from the `Jwt` configuration section: `Issuer`, `Audience`,
-`SigningKey`, and `ExpirationMinutes`. Supply the signing key through user secrets,
-environment variables, or deployment secret management; the development value is
-not suitable for production. In Swagger UI, use **Authorize** and enter the raw JWT.
+## Architecture
 
-Access tokens are short lived and contain current permission snapshots. Persisted
-refresh sessions support rotation, replay detection, per-session logout, and global
-invalidation. Administrative APIs use application-defined permissions inherited
-through roles.
+The solution follows Clean Architecture with dependencies pointing inward:
 
-## Security audit trail
+- **Domain** contains persistence-ignorant entities, value objects, domain events, and business invariants. It has no dependency on the other solution layers.
+- **Application** contains use cases and abstractions for authentication, authorization, persistence, email, and auditing. Among solution projects, Application depends only on Domain.
+- **Infrastructure** implements Application abstractions with Entity Framework Core, SQL Server, token services, password hashing, and email delivery.
+- **Api** is the ASP.NET Core composition root and exposes Minimal API endpoints, authentication and authorization middleware, health checks, and observability.
 
-Security-sensitive authentication, session, password, and authorization operations
-produce append-only semantic audit records in the identity database. Audit records
-contain controlled event identifiers and safe request context only; credentials,
-tokens, hashes, request bodies, and arbitrary headers are never part of the audit
-creation surface.
+Architecture tests enforce the Domain and Application dependency boundaries and prevent Infrastructure from referencing Api.
 
-`GET /api/audit` requires `audit.read`. Queries default to the previous 30 days,
-allow a maximum 90-day range and 100 records per page, and use deterministic cursor
-pagination. The `userId` filter explicitly matches either the actor or target user.
+## Tech Stack
 
-IP addresses and bounded User-Agent values are retained for security investigation
-and should be covered by the deployment's privacy and retention policy. Automated
-retention/purge jobs, legal holds, external SIEM export, telemetry adapters, and an
-Outbox are future extensions; Phase 13 intentionally provides no audit deletion API.
+- .NET 10, C#, ASP.NET Core Minimal APIs
+- Entity Framework Core, SQL Server
+- JWT bearer authentication, policy-based authorization
+- Swashbuckle and OpenAPI
+- OpenTelemetry, Azure Monitor, Application Insights
+- xUnit and ASP.NET Core integration testing
+- Docker and Docker Compose
+- GitHub Actions, Trivy, SPDX SBOM generation
+- Bicep, Azure Container Apps, Azure Container Registry, Azure SQL Database, Azure Key Vault
 
-## Operational readiness
+## Project Structure
 
-- `GET /health/live` reports whether the API process can answer requests. It does
-  not access SQL Server or other external dependencies.
-- `GET /health/ready` checks whether the configured identity database is reachable
-  and returns `503 Service Unavailable` when that critical dependency is unavailable.
+```text
+src/
+  EnterpriseIdentityService.Domain
+  EnterpriseIdentityService.Application
+  EnterpriseIdentityService.Infrastructure
+  EnterpriseIdentityService.Api
 
-Both endpoints are anonymous, exempt from client rate limits, and return only a
-minimal status document. They do not expose dependency names, connection details,
-exceptions, environment information, or stack traces.
+tests/
+  EnterpriseIdentityService.UnitTests
+  EnterpriseIdentityService.IntegrationTests
+  EnterpriseIdentityService.ArchitectureTests
 
-Production database migrations are an explicit deployment operation: apply the
-migrations first, deploy/start the API second, and allow traffic only after readiness
-becomes healthy. The API does not automatically migrate a production database at
-startup.
+infra/                  Azure Bicep templates and SQL identity bootstrap
+docs/                   Architecture decisions and deployment guidance
+.github/workflows/      CI and Azure deployment workflows
+```
 
-## Correlation and operational logging
+The `src` projects define the application layers, while the three test projects cover isolated behavior, infrastructure and HTTP workflows, and dependency rules.
 
-Clients may send one `X-Correlation-ID` header using up to 64 ASCII letters, digits,
-periods, underscores, or hyphens. Missing, ambiguous, or invalid values are replaced
-with a server-generated identifier. The effective value is returned in the same
-response header, included in RFC 7807 Problem Details, placed in the structured
-logging scope, and reused by the security audit context.
+## Testing & Quality
 
-Request-completion logs contain only bounded method, normalized route template,
-status, duration, correlation ID, and trace ID metadata. Request and response bodies,
-raw query strings, authorization/cookie headers, passwords, access/refresh tokens,
-reset/verification tokens, signing keys, and connection strings are not logged.
+The solution includes unit, integration, and architecture tests. GitHub Actions restores and builds the solution with warnings treated as errors, runs each test suite, checks direct and transitive NuGet dependencies for known vulnerabilities, validates the Bicep templates, builds and smoke-tests the container image, scans it with Trivy, and generates an SPDX SBOM.
 
-## OpenTelemetry foundation
+Run the complete local validation with:
 
-The API registers vendor-neutral OpenTelemetry instrumentation for inbound ASP.NET
-Core requests and .NET runtime metrics. When
-`APPLICATIONINSIGHTS_CONNECTION_STRING` is supplied, the API enables the Azure
-Monitor OpenTelemetry distribution and exports telemetry to Application Insights.
-Local development remains exporter-free by default. Application logging continues
-through `ILogger<T>`, and security audit records remain a separate durable concern.
+```powershell
+dotnet restore EnterpriseIdentityService.sln
+dotnet build EnterpriseIdentityService.sln --configuration Release --no-restore
+dotnet test EnterpriseIdentityService.sln --configuration Release --no-build
+```
 
-## Docker and local containers
+## API Overview
 
-The repository includes a production-oriented Linux image for the API and a small,
-cloud-neutral Compose topology for local development. The API image is built with
-the .NET 10 SDK and runs on the ASP.NET Core runtime as the image's non-root `app`
-user. SQL Server is reachable from the API through Compose service DNS as `sql`; it
-stores its database files in the named `sql-data` volume.
+The following routes are representative. In the Development environment, Swagger UI at `/swagger` provides the complete interactive API description.
 
-Install Docker with Compose v2 and the .NET 10 SDK. From the repository root, create
-the local environment file and replace **both** `replace-me` database values with
-the same strong SQL Server password. Replace `JWT_SIGNING_KEY` with an independent,
-random value of at least 32 characters:
+### Authentication
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `POST /api/auth/logout-all`
+
+### Account
+
+- `GET /api/users/me`
+- `POST /api/users/verify-email`
+- `POST /api/users/resend-verification-email`
+- `POST /api/users/forgot-password`
+- `POST /api/users/reset-password`
+- `POST /api/users/change-password`
+
+### Authorization
+
+- `GET /api/permissions`
+- `GET|POST /api/roles`
+- `PUT /api/roles/{roleId}/permissions`
+- `POST|DELETE /api/users/{userId}/roles/{roleId}`
+
+### Audit
+
+- `GET /api/audit` requires the `audit.read` permission.
+
+### Health
+
+- `GET /health/live`
+- `GET /health/ready`
+
+## Security & Audit
+
+Access tokens are short-lived and carry a permission snapshot plus an authorization version. Role and permission changes invalidate affected users' existing authorization state. Refresh tokens are persisted as hashed, rotating session credentials; replay detection revokes the compromised session. Logout can revoke either the current session or all sessions for a user.
+
+Security-sensitive authentication, password, session, and authorization operations create semantic, append-only audit records with controlled event identifiers and safe request context. Credentials, passwords, tokens, hashes, request bodies, and arbitrary headers are excluded. Audit queries are permission-protected, and the API provides no audit deletion endpoint.
+
+JWT settings come from the `Jwt` configuration section. The development signing key is not production-safe: do not commit secrets, and supply production values through a secret-management system. Password-recovery and email-verification links require an HTTPS public base URL.
+
+## Observability & Health
+
+The API accepts a valid incoming `X-Correlation-ID` or replaces it with a generated value. The effective ID is returned to the client and flows through structured logs, Problem Details, and audit context. Request-completion logging records bounded request metadata without sensitive headers, bodies, query strings, or credentials.
+
+OpenTelemetry instruments inbound ASP.NET Core requests and .NET runtime metrics. Local development requires no exporter; setting `APPLICATIONINSIGHTS_CONNECTION_STRING` enables Azure Monitor and Application Insights export. Durable security audit records remain separate from telemetry.
+
+`/health/live` confirms that the process can serve requests without checking external dependencies. `/health/ready` checks identity-database connectivity and returns `503 Service Unavailable` when that dependency is unavailable.
+
+## Running Locally
+
+### Prerequisites
+
+- Docker with Compose v2
+- .NET 10 SDK
+
+### 1. Configure local secrets
+
+Create `.env`, replace both `replace-me` database values with the same strong SQL Server password, and set `JWT_SIGNING_KEY` to an independent random value of at least 32 characters:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-`.env` contains credentials and must never be committed, copied into an image, or
-used as the production secret store. `.gitignore` and `.dockerignore` exclude it;
-production platforms should inject equivalent environment variables from their
-secret-management facility.
+The `.env` file contains credentials and must not be committed or copied into an image.
 
-Build the API image directly with:
-
-```powershell
-docker build --pull --tag enterprise-identity-service:local .
-```
-
-For a new database, start SQL Server first and wait for it to become healthy:
+### 2. Start SQL Server
 
 ```powershell
 docker compose up -d sql
 docker compose ps
 ```
 
-Database migrations are an explicit operation and are never run by API startup.
-Configure a host-side connection using the same password as `SQL_SA_PASSWORD` in
-`.env`, restore the repository-local EF tool, and apply the migrations before
-starting the API:
+Wait for the SQL Server container to report healthy.
+
+### 3. Apply database migrations
+
+Migrations are an explicit operation; API startup does not apply them. Use the password and host port configured in `.env`:
 
 ```powershell
 $env:ConnectionStrings__Database = 'Server=localhost,1433;Database=EnterpriseIdentityService;User ID=sa;Password=replace-with-the-value-from-.env;Encrypt=True;TrustServerCertificate=True'
@@ -120,75 +165,48 @@ dotnet ef database update --project src/EnterpriseIdentityService.Infrastructure
 Remove-Item Env:ConnectionStrings__Database
 ```
 
-If `SQL_HOST_PORT` is changed, use that host port in the migration connection
-string. SQL Server is available to local tools at `localhost,SQL_HOST_PORT` as
-`sa`. The API connection string must continue to use the container endpoint
-`sql,1433`, never `localhost`.
+If `SQL_HOST_PORT` is not `1433`, update the host-side migration connection string. The containerized API must continue to use the Compose service address `sql,1433` from `.env`.
 
-Start or rebuild the complete topology after migrations:
+### 4. Start the API
 
 ```powershell
 docker compose up --build -d
-docker compose up --build -d api  # rebuild only the API after source changes
 ```
 
-With the example ports, the API and health endpoints are:
+With the example ports:
 
 - API: `http://localhost:8080`
+- Swagger UI: `http://localhost:8080/swagger`
 - Liveness: `http://localhost:8080/health/live`
 - Readiness: `http://localhost:8080/health/ready`
 
-The container intentionally serves HTTP on port `8080`. TLS terminates at the
-deployment ingress, reverse proxy, or cloud edge; no development certificate is
-baked into the image. Password-recovery and email-verification public base URLs
-remain HTTPS-only under existing startup validation and should identify that
-external TLS endpoint. The example values are inert local placeholders while email
-delivery is disabled.
-
-Use stdout/stderr logs and stop the topology with:
+Rebuild only the API after source changes with `docker compose up --build -d api`. View logs with `docker compose logs --follow api` and stop the environment with:
 
 ```powershell
-docker compose logs --follow api
 docker compose down
 ```
 
-`docker compose down` preserves the `sql-data` volume, so users, roles, sessions,
-refresh tokens, and audit records survive container recreation. To intentionally
-erase the local database, run `docker compose down --volumes`; this is destructive
-and cannot be undone unless the database was backed up.
+## Operational Notes
 
-The API image deliberately has no added HTTP client solely for a Dockerfile
-`HEALTHCHECK`. Compose checks SQL readiness with the image's bundled `sqlcmd`, while
-deployment platforms should probe `/health/live` for process liveness and
-`/health/ready` for database-backed readiness. A transient database outage makes
-readiness fail without redefining process liveness. Compose also leaves restart and
-resource policies to the deployment environment.
+- SQL Server data persists in the `sql-data` volume when the Compose environment stops.
+- The container serves HTTP on port `8080`; TLS must terminate at the ingress, reverse proxy, or cloud edge.
+- The API writes logs to stdout and stderr and keeps durable identity and audit state in SQL Server.
+- JWT signing configuration must be consistent across replicas.
+- Fixed-window rate limits are process-local; a multi-replica deployment requires a distributed rate-limiting strategy.
 
-The API filesystem is stateless and has no application log volume. Durable identity
-and audit state lives in SQL Server. No data-protection-key volume is added because
-the current authentication/session implementation does not depend on ASP.NET Core
-Data Protection. JWT signing configuration must be identical across replicas.
-Current fixed-window rate limits are process-local, so a future multi-replica
-deployment will need a deliberate distributed rate-limit strategy.
+## Azure Deployment Architecture & CI/CD
 
-## Azure deployment and CI/CD
+The Azure deployment architecture uses Container Apps, Container Registry, Azure SQL Database, Key Vault, Log Analytics, and Application Insights. Separate managed identities give the runtime and migration job only their required access to ACR, Key Vault, and Azure SQL.
 
-Production is designed for Azure Container Apps, Azure Container Registry, Azure
-SQL Database, Key Vault, Log Analytics, and Application Insights. Bicep provisions
-the Azure resources, while GitHub Actions validates source and an immutable image,
-runs dependency and image security gates, creates an SBOM, pushes the exact validated
-artifact to ACR, executes a single EF migration job, and promotes a healthy revision.
+The pipeline is designed to promote the same immutable container artifact validated by CI. It pushes that artifact to ACR, runs its EF Core migration bundle before application deployment, creates and verifies a candidate Container Apps revision, then promotes traffic. If post-promotion readiness fails, the workflow restores traffic to the previous revision. The API itself does not run production migrations at startup.
 
-The runtime remains cloud-neutral below the API composition root: Domain and
-Application contain no Azure references, existing ASP.NET Core configuration keys
-are supplied as environment variables, and local Compose continues to use its SQL
-Server container. Production uses managed identity for ACR, Key Vault, and Azure SQL
-access. See [Azure deployment](docs/azure-deployment.md) for provisioning, OIDC,
-configuration, migration, deployment, rollback, security, networking, observability,
-cost, and future-hardening guidance.
+See [Azure deployment architecture and operations](docs/azure-deployment.md) for provisioning prerequisites, GitHub OIDC configuration, migration, deployment, rollback, networking, observability, and security guidance.
 
-### Deployment status
+## Deployment Status
 
-The Azure production architecture and deployment pipeline are implemented and
-validated through CI. Live Azure provisioning has not been performed because an
-eligible Azure subscription is not currently available.
+The repository contains the Azure infrastructure templates and deployment workflow, and CI is configured to validate the source, Bicep, and deployable container artifact. A live Azure production environment has **not** been provisioned because an eligible Azure subscription is currently unavailable.
+
+## Further Documentation
+
+- [Azure deployment architecture and operations](docs/azure-deployment.md)
+- [Modular monolith architecture decision](docs/architecture/decisions/0001-use-modular-monolith.md)

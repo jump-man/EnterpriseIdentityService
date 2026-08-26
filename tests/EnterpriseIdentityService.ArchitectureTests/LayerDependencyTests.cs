@@ -3,9 +3,6 @@ using System.Reflection;
 using ApplicationAssembly =
     EnterpriseIdentityService.Application.AssemblyReference;
 
-using ContractsAssembly =
-    EnterpriseIdentityService.Contracts.AssemblyReference;
-
 using DomainAssembly =
     EnterpriseIdentityService.Domain.AssemblyReference;
 
@@ -25,7 +22,6 @@ public sealed class LayerDependencyTests
         [
             "EnterpriseIdentityService.Api",
             "EnterpriseIdentityService.Application",
-            "EnterpriseIdentityService.Contracts",
             "EnterpriseIdentityService.Infrastructure",
             "Microsoft.AspNetCore",
             "Microsoft.AspNetCore.Authentication.JwtBearer",
@@ -49,7 +45,6 @@ public sealed class LayerDependencyTests
         string[] forbiddenDependencies =
         [
             "EnterpriseIdentityService.Api",
-            "EnterpriseIdentityService.Contracts",
             "EnterpriseIdentityService.Infrastructure",
             "Microsoft.EntityFrameworkCore",
             "Microsoft.AspNetCore",
@@ -64,22 +59,6 @@ public sealed class LayerDependencyTests
         ];
 
         AssertDoesNotReference(applicationAssembly, forbiddenDependencies);
-    }
-
-    [Fact]
-    public void Contracts_should_not_depend_on_other_solution_layers()
-    {
-        Assembly contractsAssembly = typeof(ContractsAssembly).Assembly;
-
-        string[] forbiddenDependencies =
-        [
-            "EnterpriseIdentityService.Api",
-            "EnterpriseIdentityService.Application",
-            "EnterpriseIdentityService.Domain",
-            "EnterpriseIdentityService.Infrastructure"
-        ];
-
-        AssertDoesNotReference(contractsAssembly, forbiddenDependencies);
     }
 
     [Fact]
