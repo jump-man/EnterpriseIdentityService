@@ -187,4 +187,8 @@ access. See [Azure deployment](docs/azure-deployment.md) for provisioning, OIDC,
 configuration, migration, deployment, rollback, security, networking, observability,
 cost, and future-hardening guidance.
 
-> 🚧 Work in Progress
+### Deployment status
+
+The Azure production architecture and deployment pipeline are implemented and
+validated through CI. Live Azure provisioning has not been performed because an
+eligible Azure subscription is not currently available.

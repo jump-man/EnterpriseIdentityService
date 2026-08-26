@@ -5,6 +5,11 @@ Application projects. Azure remains a deployment concern; the API still consumes
 ordinary ASP.NET Core configuration and the Infrastructure project still configures
 EF Core from `ConnectionStrings:Database`.
 
+Live Azure provisioning has not been performed because an eligible Azure
+subscription is not currently available. The deployment architecture, infrastructure
+definitions, and CI/CD path are implemented and validated without claiming a live
+production deployment.
+
 ## Architecture
 
 ```text
